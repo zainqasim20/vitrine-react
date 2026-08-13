@@ -61,3 +61,29 @@ export interface ClassifyResult {
 }
 
 export type PerceiveStatus = 'loading' | 'done' | 'error';
+
+// Stage 4 -- Extract's output. See docs/ai-system-prompt.md Part 4.1.
+export interface DesignSystemColor {
+  hex: string;
+  role: string;
+  sourceImageIds: string[];
+}
+
+export interface DesignSystemTypography {
+  role: string;
+  approxPx: number;
+  styleDescription: string;
+  userSuppliedFontName: string | null;
+}
+
+export interface DesignSystemComponentEntry {
+  count: number;
+  variants: string[];
+}
+
+export interface DesignSystemSheet {
+  colors: DesignSystemColor[];
+  typography: DesignSystemTypography[];
+  spacingGrid: { baseUnit: string; sampledGaps: number[] };
+  components: Record<string, DesignSystemComponentEntry>;
+}

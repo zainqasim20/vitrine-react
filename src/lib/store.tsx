@@ -4,8 +4,10 @@ import type { AppState, ScreenStatus, ThemeMode } from './types';
 import { DRAFTS } from './data';
 import { classifyRecords } from './pipeline/classify';
 import { perceiveImage } from './pipeline/perceive';
+import { buildDesignSystemSheet } from './pipeline/extract';
 import categorySignals from './pipeline/config/category-signals.json';
 import type { CategorySignalsConfig } from './pipeline/types';
+import type { ClientStatus } from './types';
 
 const PIPELINE_CONFIG = categorySignals as unknown as CategorySignalsConfig;
 
@@ -33,6 +35,15 @@ function fileToBase64(file: File): Promise<string> {
 function formatFileSize(bytes: number) {
   const mb = bytes / (1024 * 1024);
   return `${mb % 1 === 0 ? mb : mb.toFixed(1)} MB`;
+}
+
+// Ported from the live site's seedInterviewDefaults: pre-fills the
+// Interview form's tools chips from category-signals.json's defaultTools,
+// left fully editable (toolsUnconfirmed just controls the "guessed -- edit
+// if wrong" hint, it's not a lock).
+function seedToolsForCategory(categoryId: string | null): string[] {
+  if (!categoryId) return [];
+  return PIPELINE_CONFIG.defaultTools[categoryId]?.slice() || [];
 }
 
 const NAMES = [
@@ -131,6 +142,19 @@ const initialState: AppState = {
     fallbackOtherText: '',
     fallbackResolved: false,
     categoryResolutionMethod: 'auto',
+    softConfirmResolved: false,
+    interview: {
+      projectName: '',
+      clientStatus: 'Personal',
+      tools: [],
+      toolsUnconfirmed: true,
+      customTool: '',
+      outcome: '',
+      fonts: '',
+      submitted: false,
+      skipped: false,
+    },
+    designSystemSheet: null,
   },
 };
 
@@ -177,6 +201,15 @@ export interface AppActions {
   skipFallback: () => void;
   currentCategoryId: () => string | null;
   currentCategoryLabel: () => string;
+
+  acceptSoftConfirm: (accepted: boolean) => void;
+  setInterviewField: (field: 'projectName' | 'customTool' | 'outcome' | 'fonts', value: string) => void;
+  setInterviewClientStatus: (value: ClientStatus) => void;
+  toggleInterviewTool: (tool: string) => void;
+  addInterviewTool: () => void;
+  submitInterview: () => void;
+  skipInterview: () => void;
+  runExtractAndProceed: () => void;
 
   openQuestions: () => void;
   setQAud: (v: string) => void;
@@ -499,7 +532,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
             needsFallback: true,
             fallbackCandidates: PIPELINE_CONFIG.categories.slice(0, 2).map((c) => c.id),
           };
-      patch((s) => ({ pipeline: { ...s.pipeline, classifyResult: result } }));
+      patch((s) => ({
+        pipeline: {
+          ...s.pipeline,
+          classifyResult: result,
+          interview: { ...s.pipeline.interview, tools: seedToolsForCategory(result.category), toolsUnconfirmed: true },
+        },
+      }));
     });
   }, [patch]);
 
@@ -518,6 +557,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           fallbackOtherText: '',
           fallbackResolved: false,
           categoryResolutionMethod: 'auto',
+          softConfirmResolved: false,
+          interview: { ...s.pipeline.interview, submitted: false, skipped: false },
+          designSystemSheet: null,
         },
       }));
       navigate('/classify');
@@ -535,7 +577,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const pickFallbackCategory = useCallback(
     (catId: string) => {
       patch((s) => ({
-        pipeline: { ...s.pipeline, categoryOverride: catId, categoryOtherLabel: '', fallbackResolved: true, categoryResolutionMethod: 'picked-candidate' },
+        pipeline: {
+          ...s.pipeline,
+          categoryOverride: catId,
+          categoryOtherLabel: '',
+          fallbackResolved: true,
+          categoryResolutionMethod: 'picked-candidate',
+          interview: { ...s.pipeline.interview, tools: seedToolsForCategory(catId), toolsUnconfirmed: true },
+        },
       }));
     },
     [patch],
@@ -574,6 +623,84 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const found = PIPELINE_CONFIG.categories.find((c) => c.id === id);
     return found?.label || id;
   }, [currentCategoryId]);
+
+  // Stage 2's soft-confirm ("we're fairly sure this is X, is that right?"),
+  // folded into the Interview form per the live site's design, not shown
+  // standalone. "No" doesn't re-open a category picker on the live site
+  // either -- it's only recorded (Validate's softConfirmPending check reads
+  // this later); the project proceeds with the unconfirmed guess either way.
+  const acceptSoftConfirm = useCallback(
+    (_accepted: boolean) => {
+      patch((s) => ({ pipeline: { ...s.pipeline, softConfirmResolved: true } }));
+    },
+    [patch],
+  );
+
+  const setInterviewField = useCallback(
+    (field: 'projectName' | 'customTool' | 'outcome' | 'fonts', value: string) => {
+      patch((s) => ({ pipeline: { ...s.pipeline, interview: { ...s.pipeline.interview, [field]: value } } }));
+    },
+    [patch],
+  );
+
+  const setInterviewClientStatus = useCallback(
+    (value: ClientStatus) => {
+      patch((s) => ({ pipeline: { ...s.pipeline, interview: { ...s.pipeline.interview, clientStatus: value } } }));
+    },
+    [patch],
+  );
+
+  const toggleInterviewTool = useCallback(
+    (tool: string) => {
+      patch((s) => {
+        const tools = s.pipeline.interview.tools;
+        const next = tools.includes(tool) ? tools.filter((t) => t !== tool) : [...tools, tool];
+        return { pipeline: { ...s.pipeline, interview: { ...s.pipeline.interview, tools: next, toolsUnconfirmed: false } } };
+      });
+    },
+    [patch],
+  );
+
+  const addInterviewTool = useCallback(() => {
+    const t = stateRef.current.pipeline.interview.customTool.trim();
+    if (!t) return;
+    patch((s) => {
+      const tools = s.pipeline.interview.tools;
+      return {
+        pipeline: {
+          ...s.pipeline,
+          interview: { ...s.pipeline.interview, tools: tools.includes(t) ? tools : [...tools, t], toolsUnconfirmed: false, customTool: '' },
+        },
+      };
+    });
+  }, [patch]);
+
+  // Stage 4 -- Extract runs right after Interview, same moment as the live
+  // site's runExtractStage(). Scope note for this step: the live site
+  // routes to its Design System edit screen next; that screen doesn't
+  // exist yet here, so this bridges straight into Draft/Review instead
+  // (same temporary-bridge pattern the Fallback step used) -- the real
+  // sheet is still computed and stored for real, ready for that screen
+  // once it's built.
+  const runExtractAndProceed = useCallback(() => {
+    const sheet = buildDesignSystemSheet(stateRef.current.pipeline.perceiveRecords);
+    patch((s) => ({ pipeline: { ...s.pipeline, designSystemSheet: sheet } }));
+    finishWaiting();
+  }, [patch, finishWaiting]);
+
+  const submitInterview = useCallback(() => {
+    if (!stateRef.current.pipeline.interview.projectName.trim()) {
+      say('Add a project name, or use Skip to proceed without one');
+      return;
+    }
+    patch((s) => ({ pipeline: { ...s.pipeline, interview: { ...s.pipeline.interview, submitted: true } } }));
+    runExtractAndProceed();
+  }, [patch, say, runExtractAndProceed]);
+
+  const skipInterview = useCallback(() => {
+    patch((s) => ({ pipeline: { ...s.pipeline, interview: { ...s.pipeline.interview, skipped: true } } }));
+    runExtractAndProceed();
+  }, [patch, runExtractAndProceed]);
 
   const openQuestions = useCallback(() => navigate('/questions'), [navigate]);
 
@@ -883,6 +1010,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     skipFallback,
     currentCategoryId,
     currentCategoryLabel,
+    acceptSoftConfirm,
+    setInterviewField,
+    setInterviewClientStatus,
+    toggleInterviewTool,
+    addInterviewTool,
+    submitInterview,
+    skipInterview,
+    runExtractAndProceed,
     openQuestions,
     setQAud: (v) => patch({ qAud: v }),
     toggleQProve,

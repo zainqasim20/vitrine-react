@@ -1,4 +1,4 @@
-import type { ClassifyResult, ImageFeatureRecord, PerceiveStatus } from './pipeline/types';
+import type { ClassifyResult, DesignSystemSheet, ImageFeatureRecord, PerceiveStatus } from './pipeline/types';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -23,6 +23,20 @@ export type PreviewLayout = 'grid' | 'editorial' | 'list';
 export interface VariantSlot {
   index: number;
   ready: boolean;
+}
+
+export type ClientStatus = 'Personal' | 'Client — can name' | 'Client — confidential (NDA)';
+
+export interface InterviewState {
+  projectName: string;
+  clientStatus: ClientStatus;
+  tools: string[];
+  toolsUnconfirmed: boolean;
+  customTool: string;
+  outcome: string;
+  fonts: string;
+  submitted: boolean;
+  skipped: boolean;
 }
 
 export interface AppState {
@@ -122,5 +136,11 @@ export interface AppState {
     fallbackOtherText: string;
     fallbackResolved: boolean;
     categoryResolutionMethod: 'auto' | 'picked-candidate' | 'picked-other' | 'skipped';
+
+    // Stage 3 -- Interview -- and Stage 4 -- Extract's output, computed
+    // once Interview is submitted/skipped.
+    softConfirmResolved: boolean;
+    interview: InterviewState;
+    designSystemSheet: DesignSystemSheet | null;
   };
 }

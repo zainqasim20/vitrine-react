@@ -107,14 +107,20 @@ export interface AppState {
   // falls through to the pre-pipeline flow unchanged.
   apiStatus: { gemini: boolean; checked: boolean };
 
-  // AI pipeline (docs/ai-system-prompt.md Stages 1-2: Perceive/Classify so
-  // far). Keyed by file id rather than array index (the live site uses
-  // index) -- an id is stable across reordering/removal, which the index
-  // isn't; the underlying per-record algorithm is unchanged.
+  // AI pipeline (docs/ai-system-prompt.md Stages 1-2: Perceive/Classify,
+  // plus Stage 2's Fallback question so far). Keyed by file id rather than
+  // array index (the live site uses index) -- an id is stable across
+  // reordering/removal, which the index isn't; the underlying per-record
+  // algorithm is unchanged.
   pipeline: {
     perceiveRecords: Record<string, ImageFeatureRecord>;
     perceiveStatus: Record<string, PerceiveStatus>;
     perceiveError: Record<string, string>;
     classifyResult: ClassifyResult | null;
+    categoryOverride: string | null;
+    categoryOtherLabel: string;
+    fallbackOtherText: string;
+    fallbackResolved: boolean;
+    categoryResolutionMethod: 'auto' | 'picked-candidate' | 'picked-other' | 'skipped';
   };
 }

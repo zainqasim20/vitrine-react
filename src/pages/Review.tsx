@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useApp } from '../lib/store';
 import { DRAFTS, PALETTE, PATTERNS } from '../lib/data';
 import { ClarifyingQuestion } from '../components/ClarifyingQuestion';
-import { PipelineDebug } from '../components/PipelineDebug';
 
 const TEMPLATES = ['Minimalist Grid', 'Story Scroll', 'Editorial Magazine'];
 
@@ -23,7 +22,6 @@ export function Review() {
   return (
     <main style={{ flex: 1, padding: '48px 32px 96px' }}>
       <div style={{ maxWidth: 1080, margin: '0 auto' }}>
-        <PipelineDebug />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <button

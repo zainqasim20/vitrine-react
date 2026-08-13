@@ -126,6 +126,11 @@ const initialState: AppState = {
     perceiveStatus: {},
     perceiveError: {},
     classifyResult: null,
+    categoryOverride: null,
+    categoryOtherLabel: '',
+    fallbackOtherText: '',
+    fallbackResolved: false,
+    categoryResolutionMethod: 'auto',
   },
 };
 
@@ -165,6 +170,13 @@ export interface AppActions {
 
   generate: () => void;
   finishWaiting: () => void;
+
+  pickFallbackCategory: (catId: string) => void;
+  setFallbackOtherText: (text: string) => void;
+  pickFallbackOther: () => void;
+  skipFallback: () => void;
+  currentCategoryId: () => string | null;
+  currentCategoryLabel: () => string;
 
   openQuestions: () => void;
   setQAud: (v: string) => void;
@@ -426,12 +438,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [patch, navigate, load]);
 
   // Stage 1 + 2 -- Perceive then Classify, ported from the live site's
-  // perceiveAllFiles()/runClassification(). Runs in the background behind
-  // the existing (still-mocked) Waiting -> Draft transition: real network
-  // calls happen and real results land in state.pipeline, but nothing
-  // visible changes yet -- that's the next step, once this one's verified.
-  // Already-'done'/'error' files are skipped, same as the live site, so
-  // nothing is re-sent to Gemini on a re-entry.
+  // perceiveAllFiles()/runClassification(). Drives the real /classify
+  // screen's loading state while it runs. Already-'done'/'error' files are
+  // skipped, same as the live site, so nothing is re-sent to Gemini on a
+  // re-entry (e.g. if Fallback's "something else" round-trips back here).
   const runPerceiveAndClassify = useCallback(() => {
     const files = stateRef.current.files;
     const jobs = files.map((entry) => {
@@ -493,10 +503,77 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, [patch]);
 
+  // Ported from the live site's generate(): real pipeline needs a real
+  // vision call to run at all, so only take the /classify path when a
+  // Gemini key is actually configured. Otherwise -- unchanged -- straight
+  // to the existing mocked Waiting -> Draft flow.
   const generate = useCallback(() => {
-    if (stateRef.current.apiStatus.gemini) runPerceiveAndClassify();
-    navigate('/waiting');
-  }, [navigate, runPerceiveAndClassify]);
+    if (stateRef.current.apiStatus.gemini) {
+      patch((s) => ({
+        pipeline: {
+          ...s.pipeline,
+          classifyResult: null,
+          categoryOverride: null,
+          categoryOtherLabel: '',
+          fallbackOtherText: '',
+          fallbackResolved: false,
+          categoryResolutionMethod: 'auto',
+        },
+      }));
+      navigate('/classify');
+      runPerceiveAndClassify();
+    } else {
+      navigate('/waiting');
+    }
+  }, [navigate, patch, runPerceiveAndClassify]);
+
+  // Stage 2 fallback resolution actions -- ported from the live site's
+  // pickFallbackCategory/pickFallbackOther/skipFallback. None of these
+  // re-run Perceive or Classify; they only record how the designer resolved
+  // a low-confidence category guess (categoryResolutionMethod feeds
+  // Validate's low-confidence-uncorrected check later).
+  const pickFallbackCategory = useCallback(
+    (catId: string) => {
+      patch((s) => ({
+        pipeline: { ...s.pipeline, categoryOverride: catId, categoryOtherLabel: '', fallbackResolved: true, categoryResolutionMethod: 'picked-candidate' },
+      }));
+    },
+    [patch],
+  );
+
+  const setFallbackOtherText = useCallback(
+    (text: string) => {
+      patch((s) => ({ pipeline: { ...s.pipeline, fallbackOtherText: text } }));
+    },
+    [patch],
+  );
+
+  const pickFallbackOther = useCallback(() => {
+    const text = stateRef.current.pipeline.fallbackOtherText.trim();
+    if (!text) {
+      say('Type what kind of project this is');
+      return;
+    }
+    patch((s) => ({
+      pipeline: { ...s.pipeline, categoryOverride: null, categoryOtherLabel: text, fallbackResolved: true, categoryResolutionMethod: 'picked-other' },
+    }));
+  }, [patch, say]);
+
+  const skipFallback = useCallback(() => {
+    patch((s) => ({ pipeline: { ...s.pipeline, fallbackResolved: true, categoryResolutionMethod: 'skipped' } }));
+  }, [patch]);
+
+  const currentCategoryId = useCallback(() => {
+    const p = stateRef.current.pipeline;
+    return p.categoryOverride || (p.classifyResult ? p.classifyResult.category : null);
+  }, []);
+
+  const currentCategoryLabel = useCallback(() => {
+    const id = currentCategoryId();
+    if (!id) return stateRef.current.pipeline.categoryOtherLabel || 'this project';
+    const found = PIPELINE_CONFIG.categories.find((c) => c.id === id);
+    return found?.label || id;
+  }, [currentCategoryId]);
 
   const openQuestions = useCallback(() => navigate('/questions'), [navigate]);
 
@@ -800,6 +877,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     openVariant,
     generate,
     finishWaiting,
+    pickFallbackCategory,
+    setFallbackOtherText,
+    pickFallbackOther,
+    skipFallback,
+    currentCategoryId,
+    currentCategoryLabel,
     openQuestions,
     setQAud: (v) => patch({ qAud: v }),
     toggleQProve,

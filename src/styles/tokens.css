@@ -1,0 +1,82 @@
+/*
+  Vitrine design tokens.
+  Neutrals + brand accents from the locked design system brief.
+  Light values live on :root; dark values override under [data-theme="dark"]
+  and under [data-theme="system"] when the OS prefers dark.
+*/
+:root {
+  --bg: #FFFFFF;
+  --bg-rgb: 255, 255, 255;
+  --surface: #FFFFFF;
+  --surface-2: #FAFAFA;
+  --surface-3: #F3F3F5;
+  --border: #E7E7EA;
+  --border-strong: #D3D3D8;
+  --text: #14141A;
+  --text-2: #55555F;
+  --text-3: #94949C;
+
+  --violet: #7A47F5;
+  --violet-deep: #6038EE;
+  --violet-light: #F3EFFE;
+  --violet-gradient: linear-gradient(135deg, #6038EE 0%, #AD5BFC 100%);
+  --blue: #2B8FF5;
+  --blue-deep: #224EF3;
+  --coral-gradient: linear-gradient(135deg, #FC6768 0%, #FEA251 100%);
+  --coral: #FD8B5C;
+  --error: #E4433D;
+  --error-bg: #FDEBEA;
+  --success: #1FA971;
+  --success-bg: #E4F6EE;
+
+  --font-display: 'Bricolage Grotesque', sans-serif;
+  --font-body: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', monospace;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 999px;
+
+  --shadow-sm: 0 1px 2px rgba(20,20,26,0.04);
+  --shadow-md: 0 4px 12px rgba(20,20,26,0.06);
+  --shadow-lg: 0 12px 32px rgba(20,20,26,0.08);
+}
+
+[data-theme="dark"] {
+  --bg: #101014;
+  --bg-rgb: 16, 16, 20;
+  --surface: #18181D;
+  --surface-2: #1E1E24;
+  --surface-3: #27272E;
+  --border: #2C2C34;
+  --border-strong: #3A3A44;
+  --text: #F2F2F4;
+  --text-2: #A7A7B0;
+  --text-3: #77777F;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] {
+    --bg: #101014;
+    --bg-rgb: 16, 16, 20;
+    --surface: #18181D;
+    --surface-2: #1E1E24;
+    --surface-3: #27272E;
+    --border: #2C2C34;
+    --border-strong: #3A3A44;
+    --text: #F2F2F4;
+    --text-2: #A7A7B0;
+    --text-3: #77777F;
+  }
+}

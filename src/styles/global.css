@@ -1,0 +1,55 @@
+@import './tokens.css';
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  transition: background 160ms ease-out, color 160ms ease-out;
+}
+
+h1, h2, h3, p, figure { margin: 0; }
+
+button, input, textarea, select {
+  font-family: inherit;
+  color: inherit;
+}
+
+button { cursor: pointer; }
+
+a { color: var(--blue); text-decoration: none; }
+a:hover { color: var(--blue-deep); text-decoration: underline; text-underline-offset: 3px; }
+
+::selection { background: rgba(122, 71, 245, 0.18); }
+
+:focus-visible {
+  outline: 2px solid var(--violet);
+  outline-offset: 2px;
+}
+
+img[data-logo="dark"] { display: none !important; }
+[data-theme="dark"] img[data-logo="light"] { display: none !important; }
+[data-theme="dark"] img[data-logo="dark"] { display: block !important; }
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] img[data-logo="light"] { display: none !important; }
+  :root[data-theme="system"] img[data-logo="dark"] { display: block !important; }
+}
+
+@keyframes v-shimmer { 0% { background-position: -420px 0; } 100% { background-position: 420px 0; } }
+@keyframes v-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes v-draw { 0% { clip-path: inset(0 100% 0 0); opacity: .4; } 60%, 100% { clip-path: inset(0 0 0 0); opacity: 1; } }
+@keyframes v-float { 0%, 100% { transform: translateY(-4px); } 50% { transform: translateY(4px); } }
+@keyframes v-scale-in { 0% { transform: scale(.6); opacity: 0; } 55%, 100% { transform: scale(1); opacity: 1; } }
+@keyframes v-pulse-accent { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+@keyframes v-static { 0%, 100% { transform: none; } }
+@keyframes v-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes v-pulse-badge { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

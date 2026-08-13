@@ -1,0 +1,111 @@
+{
+  "_comment": "Transcribed from docs/ai-system-prompt.md Part 2.1-2.3 and Part 3.2. Data only -- classify.ts and the Interview form read this, no category logic is hardcoded in JS. Ported verbatim from the live site's lib/pipeline/config/category-signals.json.",
+
+  "categories": [
+    { "id": "web-ui", "label": "Web / UI Design" },
+    { "id": "mobile-app", "label": "Mobile App Design" },
+    { "id": "product-design", "label": "Product Design" },
+    { "id": "branding", "label": "Branding / Identity" },
+    { "id": "graphic-design", "label": "Graphic Design" },
+    { "id": "illustration", "label": "Illustration" },
+    { "id": "architecture", "label": "Architecture / Spatial" }
+  ],
+
+  "thresholds": {
+    "autoClassify": 95,
+    "softConfirm": 80
+  },
+
+  "defaultTools": {
+    "web-ui": ["Figma", "Framer"],
+    "mobile-app": ["Figma", "Sketch"],
+    "product-design": ["Figma", "Blender", "KeyShot"],
+    "branding": ["Adobe Illustrator", "Figma"],
+    "graphic-design": ["Adobe Photoshop", "Adobe Illustrator", "InDesign"],
+    "illustration": ["Procreate", "Adobe Photoshop", "Illustrator"],
+    "architecture": ["SketchUp", "AutoCAD", "Lumion", "V-Ray"]
+  },
+
+  "signals": [
+    {
+      "id": "is-ui-screen",
+      "when": { "field": "contentType.isUIScreen", "equals": true },
+      "weights": { "web-ui": 35, "mobile-app": 35 }
+    },
+    {
+      "id": "phone-shaped",
+      "when": {
+        "any": [
+          { "field": "aspectRatio", "equals": "9:16" },
+          { "field": "chrome.deviceFrame", "equals": "phone" }
+        ]
+      },
+      "weights": { "web-ui": -10, "mobile-app": 40 }
+    },
+    {
+      "id": "wide-desktop-shaped",
+      "when": {
+        "all": [
+          { "field": "aspectRatio", "in": ["16:9", "4:3"] },
+          { "field": "chrome.deviceFrame", "in": ["none", "laptop"] }
+        ]
+      },
+      "weights": { "web-ui": 25, "mobile-app": -10 }
+    },
+    {
+      "id": "browser-chrome-visible",
+      "when": { "field": "chrome.browserChrome", "equals": true },
+      "weights": { "web-ui": 30, "mobile-app": -20 }
+    },
+    {
+      "id": "has-web-app-components",
+      "when": { "field": "components", "includesAny": ["nav-bar", "form-field", "table"] },
+      "weights": { "web-ui": 15, "mobile-app": 15 }
+    },
+    {
+      "id": "is-logo-or-mark",
+      "when": { "field": "contentType.isLogoOrMark", "equals": true },
+      "weights": { "branding": 45, "graphic-design": 10 }
+    },
+    {
+      "id": "is-moodboard-or-palette",
+      "when": { "field": "contentType.isMoodboardOrPalette", "equals": true },
+      "weights": { "branding": 30, "graphic-design": 5 }
+    },
+    {
+      "id": "is-3d-render",
+      "when": { "field": "contentType.is3DRender", "equals": true },
+      "weights": { "product-design": 40 }
+    },
+    {
+      "id": "is-architectural-render",
+      "when": { "field": "contentType.isArchitecturalRender", "equals": true },
+      "weights": { "architecture": 50 }
+    },
+    {
+      "id": "is-packaging",
+      "when": { "field": "contentType.isPackaging", "equals": true },
+      "weights": { "product-design": 20, "branding": 25, "graphic-design": 10 }
+    },
+    {
+      "id": "is-print-layout",
+      "when": { "field": "contentType.isPrintLayout", "equals": true },
+      "weights": { "branding": 5, "graphic-design": 35 }
+    },
+    {
+      "id": "is-illustration",
+      "when": { "field": "contentType.isIllustration", "equals": true },
+      "weights": { "graphic-design": 10, "illustration": 45 }
+    },
+    {
+      "id": "presentation-scene-staging",
+      "when": { "field": "mockupStaging", "equals": "presentation-scene" },
+      "weights": { "product-design": 10, "branding": 10, "graphic-design": 10, "illustration": 10, "architecture": 15 }
+    },
+    {
+      "id": "print-mockup-staging",
+      "when": { "field": "mockupStaging", "equals": "print-mockup" },
+      "weights": { "branding": 5, "graphic-design": 25 }
+    }
+  ]
+}

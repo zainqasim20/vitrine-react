@@ -1,10 +1,20 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Logo } from '../components/Logo';
 import { ThemeSwitch } from '../components/ThemeSwitch';
 import { HOW_STEPS, TEMPLATE_TEASERS } from '../lib/data';
 
 const WORDS = ['portfolio', 'case study', 'showcase page'];
+
+// Real three-step demo, ported from the live site's LANDING_FRAMES/
+// landingFrameMock() -- replaces the fake, unwired before/after slider that
+// used to sit here with the actual 01 Upload / 02 Draft / 03 Refine steps,
+// hover-to-preview.
+const LANDING_FRAMES = [
+  { key: 'upload', label: '01 Upload', icon: 'ph ph-cloud-arrow-up' },
+  { key: 'draft', label: '02 Draft', icon: 'ph-fill ph-sparkle' },
+  { key: 'refine', label: '03 Refine', icon: 'ph ph-cursor' },
+] as const;
 
 function useTypewriter() {
   const [text, setText] = useState('');
@@ -51,27 +61,7 @@ function useTypewriter() {
 export function Landing() {
   const navigate = useNavigate();
   const typeText = useTypewriter();
-  const [heroSlide, setHeroSlide] = useState(50);
-  const trackRef = useRef<HTMLDivElement>(null);
-
-  const onSliderDown = (e: React.PointerEvent) => {
-    e.preventDefault();
-    const track = trackRef.current;
-    if (!track) return;
-    const update = (clientX: number) => {
-      const r = track.getBoundingClientRect();
-      const pct = Math.max(0, Math.min(100, ((clientX - r.left) / r.width) * 100));
-      setHeroSlide(pct);
-    };
-    update(e.clientX);
-    const mv = (ev: PointerEvent) => update(ev.clientX);
-    const up = () => {
-      window.removeEventListener('pointermove', mv);
-      window.removeEventListener('pointerup', up);
-    };
-    window.addEventListener('pointermove', mv);
-    window.addEventListener('pointerup', up);
-  };
+  const [landingDemo, setLandingDemo] = useState(0);
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--text)' }}>
@@ -161,77 +151,32 @@ export function Landing() {
           </div>
 
           <div style={{ maxWidth: 1200, margin: '0 auto', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 40, alignItems: 'center' }}>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <div
-                ref={trackRef}
-                onPointerDown={onSliderDown}
-                style={{
-                  position: 'relative',
-                  aspectRatio: '16 / 10.5',
-                  border: '1px solid var(--border)',
-                  borderRadius: 16,
-                  overflow: 'hidden',
-                  cursor: 'ew-resize',
-                  userSelect: 'none',
-                  touchAction: 'none',
-                }}
-              >
-                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(160deg, #F9F7FF 0%, #F3EFFE 100%)', padding: 20, display: 'flex', flexDirection: 'column', gap: '10%' }}>
-                  <span style={{ height: '26%', borderRadius: 8, background: 'var(--violet-gradient)', display: 'flex', alignItems: 'center', padding: '0 10%' }}>
-                    <span style={{ height: 8, width: '42%', background: 'rgba(255,255,255,0.85)', borderRadius: 2 }} />
-                  </span>
-                  <span style={{ flex: 1, border: '1px solid #E3D9FA', borderRadius: 8, background: '#FFFFFF', display: 'flex', flexDirection: 'column', gap: '9%', padding: '12%', justifyContent: 'center' }}>
-                    <span style={{ height: 9, width: '64%', background: '#14141A', borderRadius: 2 }} />
-                    <span style={{ height: 5, background: '#E7E7EA', borderRadius: 2 }} />
-                    <span style={{ height: 5, width: '86%', background: '#E7E7EA', borderRadius: 2 }} />
-                  </span>
-                </div>
-
-                <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', clipPath: `inset(0 ${100 - heroSlide}% 0 0)`, background: 'var(--surface)' }}>
-                  <div style={{ position: 'absolute', inset: 0, padding: 20, display: 'flex', flexDirection: 'column', gap: '10%' }}>
-                    <span style={{ height: '16%', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--surface-2)' }} />
-                    <span style={{ flex: 1, border: '1px solid var(--border)', borderRadius: 6, background: 'var(--surface-2)', display: 'flex', flexDirection: 'column', gap: '10%', padding: '12%', justifyContent: 'center' }}>
-                      <span style={{ height: 8, width: '54%', background: 'var(--text-3)', borderRadius: 2 }} />
-                      <span style={{ height: 5, background: 'var(--border)', borderRadius: 2 }} />
-                      <span style={{ height: 5, width: '78%', background: 'var(--border)', borderRadius: 2 }} />
-                      <span style={{ height: 18, width: 72, borderRadius: 6, background: 'var(--border)', marginTop: 6 }} />
-                    </span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+              {LANDING_FRAMES.map((f, i) => {
+                const on = landingDemo === i;
+                return (
+                  <div key={f.key}>
+                    <div
+                      onMouseEnter={() => setLandingDemo(i)}
+                      style={{
+                        border: `1.5px solid ${on ? 'var(--violet)' : 'var(--border)'}`,
+                        borderRadius: 14,
+                        padding: 16,
+                        background: on ? 'var(--violet-light)' : 'var(--surface)',
+                        cursor: 'default',
+                        transition: 'border-color 160ms ease-out, background 160ms ease-out',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                        <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 11.5, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', color: on ? 'var(--violet-deep)' : 'var(--text-3)' }}>{f.label}</span>
+                        <i className={f.icon} style={{ fontSize: 16, color: on ? 'var(--violet-deep)' : 'var(--text-3)' }} />
+                      </div>
+                      <LandingFrameMock stepKey={f.key} />
+                    </div>
+                    {i < LANDING_FRAMES.length - 1 && <span style={{ display: 'block', width: 1, height: 16, background: 'var(--border)', margin: '0 auto' }} />}
                   </div>
-                </div>
-
-                <div style={{ position: 'absolute', top: 0, bottom: 0, left: `${heroSlide}%`, width: 0, pointerEvents: 'none' }}>
-                  <span style={{ position: 'absolute', top: 0, bottom: 0, left: -1, width: 2, background: '#FFFFFF', boxShadow: '0 0 0 1px rgba(20,20,26,0.15)' }} />
-                  <span
-                    style={{
-                      position: 'absolute',
-                      top: '50%',
-                      left: 0,
-                      transform: 'translate(-50%, -50%)',
-                      width: 34,
-                      height: 34,
-                      borderRadius: 999,
-                      background: '#FFFFFF',
-                      boxShadow: '0 6px 16px rgba(20,20,26,0.22)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <i className="ph ph-arrows-left-right" style={{ fontSize: 16, color: '#14141A' }} />
-                  </span>
-                </div>
-
-                <span style={{ position: 'absolute', left: 12, top: 12, height: 24, padding: '0 10px', borderRadius: 999, background: 'rgba(var(--bg-rgb), 0.9)', border: '1px solid var(--border)', color: 'var(--text-2)', fontFamily: "'Geist Mono', monospace", fontSize: 11, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center' }}>
-                  Before
-                </span>
-                <span style={{ position: 'absolute', right: 12, top: 12, height: 24, padding: '0 10px', borderRadius: 999, background: 'rgba(var(--bg-rgb), 0.9)', border: '1px solid var(--border)', color: 'var(--violet)', fontFamily: "'Geist Mono', monospace", fontSize: 11, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <i className="ph-fill ph-sparkle" style={{ fontSize: 11 }} />
-                  After
-                </span>
-              </div>
-              <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 11.5, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--text-3)', marginTop: 12, alignSelf: 'center' }}>
-                Drag to compare — one screen in, a written page out
-              </span>
+                );
+              })}
             </div>
 
             <button
@@ -305,10 +250,8 @@ export function Landing() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 20 }}>
               {TEMPLATE_TEASERS.map((t) => (
                 <div key={t.name} style={{ border: '1px solid var(--border)', borderRadius: 16, background: 'var(--surface)', overflow: 'hidden' }}>
-                  <div style={{ aspectRatio: '4 / 3', background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: 20, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gridAutoRows: '1fr', gap: 8 }}>
-                    {Array.from({ length: 6 }).map((_, i) => (
-                      <span key={i} style={{ background: i === 4 ? '#14141A' : 'var(--surface-3)' }} />
-                    ))}
+                  <div style={{ aspectRatio: '4 / 3', background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: 20 }}>
+                    <TemplateTeaserMock name={t.name} />
                   </div>
                   <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 4 }}>
                     <span style={{ fontSize: 15, fontWeight: 700 }}>{t.name}</span>
@@ -340,6 +283,111 @@ export function Landing() {
           </nav>
         </footer>
       </main>
+    </div>
+  );
+}
+
+// Real per-step mock visuals, ported from the live site's landingFrameMock().
+function LandingFrameMock({ stepKey }: { stepKey: (typeof LANDING_FRAMES)[number]['key'] }) {
+  if (stepKey === 'upload') {
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, height: 72 }}>
+        <span style={{ border: '1px dashed var(--border)', borderRadius: 6, background: 'var(--surface-2)' }} />
+        <span style={{ border: '1px dashed var(--border)', borderRadius: 6, background: 'var(--surface-2)' }} />
+        <span style={{ border: '1px dashed var(--border)', borderRadius: 6, background: 'var(--surface-2)' }} />
+        <span style={{ border: '1.5px dashed var(--violet)', borderRadius: 6, background: 'var(--violet-light)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <i className="ph ph-plus" style={{ fontSize: 16, color: 'var(--violet)' }} />
+        </span>
+      </div>
+    );
+  }
+  if (stepKey === 'draft') {
+    return (
+      <div style={{ display: 'flex', gap: 10, height: 72, alignItems: 'center' }}>
+        <span style={{ flex: 'none', width: 40, height: 40, borderRadius: 6, background: 'var(--surface-3)' }} />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 7 }}>
+          <span style={{ height: 16, width: 62, borderRadius: 999, background: 'var(--coral-gradient)' }} />
+          <span style={{ height: 6, borderRadius: 2, background: 'var(--border)' }} />
+          <span style={{ height: 6, width: '70%', borderRadius: 2, background: 'var(--border)' }} />
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div style={{ position: 'relative', height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ position: 'relative', width: '70%', height: '80%', border: '1.5px solid var(--violet)', borderRadius: 6 }}>
+        {['nw', 'ne', 'sw', 'se'].map((corner) => (
+          <span
+            key={corner}
+            style={{
+              position: 'absolute',
+              width: 6,
+              height: 6,
+              border: '1.5px solid var(--violet)',
+              borderRadius: 1.5,
+              background: 'var(--surface)',
+              top: corner.includes('n') ? -3 : undefined,
+              bottom: corner.includes('s') ? -3 : undefined,
+              left: corner.includes('w') ? -3 : undefined,
+              right: corner.includes('e') ? -3 : undefined,
+            }}
+          />
+        ))}
+      </div>
+      <span style={{ position: 'absolute', right: 0, bottom: 0, height: 20, padding: '0 8px', borderRadius: 999, background: 'var(--violet-gradient)', color: '#FFFFFF', fontFamily: "'Geist Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.03em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+        <i className="ph-fill ph-play-circle" style={{ fontSize: 10 }} />
+        Motion
+      </span>
+    </div>
+  );
+}
+
+// Real per-style mock visuals, ported from the live site's templateThumbMock() --
+// distinct from each other so a visitor can actually read what each style means,
+// rather than four copies of the same generic tile grid.
+function TemplateTeaserMock({ name }: { name: string }) {
+  if (name === 'Minimalist Grid') {
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gridAutoRows: '1fr', gap: 8, height: '100%' }}>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <span key={i} style={{ borderRadius: 3, background: i === 4 ? '#14141A' : 'var(--surface-3)' }} />
+        ))}
+      </div>
+    );
+  }
+  if (name === 'Story Scroll') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, height: '100%', justifyContent: 'center' }}>
+        <span style={{ height: 8, width: '58%', borderRadius: 2, background: '#14141A' }} />
+        <span style={{ height: 34, borderRadius: 4, background: 'var(--surface-3)' }} />
+        <span style={{ height: 6, borderRadius: 2, background: 'var(--border)' }} />
+        <span style={{ height: 6, width: '72%', borderRadius: 2, background: 'var(--border)' }} />
+        <span style={{ height: 20, width: '40%', borderRadius: 4, background: 'var(--surface-3)' }} />
+      </div>
+    );
+  }
+  if (name === 'Metrics-First') {
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, height: '100%', alignItems: 'end' }}>
+        {[0.9, 0.55, 0.75, 0.4].map((h, i) => (
+          <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6, height: '100%', justifyContent: 'flex-end' }}>
+            <span style={{ height: `${h * 100}%`, borderRadius: 3, background: '#14141A' }} />
+            <span style={{ height: 5, borderRadius: 2, background: 'var(--border)' }} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+  // Editorial Magazine
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 12, height: '100%' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, justifyContent: 'center' }}>
+        <span style={{ height: 9, width: '90%', borderRadius: 2, background: '#14141A' }} />
+        <span style={{ height: 9, width: '60%', borderRadius: 2, background: '#14141A' }} />
+        <span style={{ height: 5, width: '100%', borderRadius: 2, background: 'var(--border)', marginTop: 6 }} />
+        <span style={{ height: 5, width: '80%', borderRadius: 2, background: 'var(--border)' }} />
+      </div>
+      <span style={{ borderRadius: 4, background: 'var(--surface-3)' }} />
     </div>
   );
 }

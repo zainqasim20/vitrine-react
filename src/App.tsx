@@ -10,6 +10,7 @@ import { DesignSystem } from './pages/DesignSystem';
 import { Questions } from './pages/Questions';
 import { Review } from './pages/Review';
 import { Refine } from './pages/Refine';
+import { Preview } from './pages/Preview';
 import { Published } from './pages/Published';
 import { Stub } from './pages/Stub';
 
@@ -18,6 +19,7 @@ export default function App() {
     <AppProvider>
       <Routes>
         <Route path="/" element={<Landing />} />
+        <Route path="/preview" element={<Preview />} />
         <Route element={<FlowLayout />}>
           <Route path="/create" element={<Create />} />
           <Route path="/waiting" element={<Waiting />} />

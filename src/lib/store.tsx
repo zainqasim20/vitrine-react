@@ -141,6 +141,8 @@ const initialState: AppState = {
   adv: false,
   cover: 0,
   prevLay: 'list',
+  previewLayout: 'stacked',
+  previewTheme: 'minimal',
   adjB: 100,
   adjC: 100,
   adjS: 100,
@@ -336,6 +338,10 @@ export interface AppActions {
   toggleMore: () => void;
   setPrevLay: (v: AppState['prevLay']) => void;
   setCover: (i: number) => void;
+
+  goPreview: () => void;
+  setPreviewLayout: (v: AppState['previewLayout']) => void;
+  setPreviewTheme: (v: AppState['previewTheme']) => void;
 
   say: (text: string) => void;
   copyMd: () => void;
@@ -1142,6 +1148,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (stateRef.current.pipeline.classifyResult) runPresent();
   }, [approvedIndices, navigate, say, runPresent]);
 
+  // Real, public case-study preview -- ported from the live site's
+  // goPreview(). Guarded on the same real-section-exists check as Refine.
+  const goPreview = useCallback(() => {
+    if (!approvedIndices().length) {
+      say('Approve a section first');
+      return;
+    }
+    navigate('/preview');
+  }, [approvedIndices, say, navigate]);
+
+  const setPreviewLayout = useCallback((v: AppState['previewLayout']) => patch({ previewLayout: v }), [patch]);
+  const setPreviewTheme = useCallback((v: AppState['previewTheme']) => patch({ previewTheme: v }), [patch]);
+
   const finish = useCallback(() => {
     if (!approvedIndices().length) {
       say('Approve a section first');
@@ -1442,6 +1461,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setCover: (i) => {
       patch({ cover: i });
     },
+    goPreview,
+    setPreviewLayout,
+    setPreviewTheme,
     say,
     copyMd,
     downloadMd,

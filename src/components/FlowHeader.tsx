@@ -113,6 +113,14 @@ export function FlowHeader() {
             </button>
             <button
               type="button"
+              onClick={() => actions.goPreview()}
+              style={{ ...navLinkStyle, border: '1px solid var(--border)' }}
+            >
+              <i className="ph ph-eye" style={{ fontSize: 16 }} />
+              Preview
+            </button>
+            <button
+              type="button"
               onClick={() => actions.copyMd()}
               title={state.copied ? 'Copied' : 'Copy as Markdown'}
               style={{ flex: 'none', width: 38, height: 38, border: '1px solid var(--border)', borderRadius: 10, background: 'transparent', color: 'var(--text)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}

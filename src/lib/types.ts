@@ -117,6 +117,14 @@ export interface AppState {
   adv: boolean;
   cover: number;
   prevLay: PreviewLayout;
+
+  // Real, public Preview page (/preview) -- distinct from prevLay (the
+  // Refine canvas's own grid/editorial/list toggle). Layout/theme choices
+  // here are real, applied for real; fx (imgFx/cursorFx/reveal/revealAmt
+  // above) are read here too, same fields Refine's Micro-interactions panel
+  // already writes to -- Preview is where they actually run.
+  previewLayout: 'stacked' | 'side-by-side' | 'compact';
+  previewTheme: 'minimal' | 'editorial' | 'bold' | 'playful';
   adjB: number;
   adjC: number;
   adjS: number;

@@ -41,6 +41,7 @@ export default function viteDevApiPlugin() {
   const routes = {
     '/api/status': new URL('./api/status.js', import.meta.url),
     '/api/perceive-image': new URL('./api/perceive-image.js', import.meta.url),
+    '/api/analyze-image': new URL('./api/analyze-image.js', import.meta.url),
   };
 
   return {

@@ -1,4 +1,12 @@
-import type { ClassifyResult, DesignSystemSheet, ImageFeatureRecord, PerceiveStatus } from './pipeline/types';
+import type { ApprovedSection, ClassifyResult, DesignSystemSheet, ImageFeatureRecord, PerceiveStatus, PresentFrame } from './pipeline/types';
+
+// The canvas's real, dynamic section list -- a superset of ApprovedSection
+// that also carries the real Design System sheet and any Present-generated
+// placeholder sections, each tagged with `kind` so Refine.tsx can branch.
+export type CanvasSection =
+  | (ApprovedSection & { kind: 'image' })
+  | { id: string; kind: 'design-system'; label: string; content: DesignSystemSheet }
+  | { id: string; kind: 'generated'; label: string; headline: string; body: string };
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -9,6 +17,14 @@ export interface UploadedFile {
   name: string;
   file?: File;
   mimeType?: string;
+  // Real object URL for the uploaded file, created via URL.createObjectURL
+  // and revoked on removal -- the actual screenshot, not a placeholder graphic.
+  url?: string;
+}
+
+export interface Caption {
+  headline: string;
+  body: string;
 }
 
 export interface SectionSize {
@@ -115,6 +131,15 @@ export interface AppState {
   published: boolean;
   dlSel: Record<number, boolean>;
 
+  // Real per-image AI drafting (not one of the 7 named pipeline stages --
+  // the pre-existing "draft a section per screen" feature). Keyed by file
+  // index, matching statuses/idx -- ported from the live site's
+  // state.captions/captionSource/draftStatus/draftError.
+  captions: Record<number, Caption>;
+  captionSource: Record<number, 'ai'>;
+  draftStatus: Record<number, 'loading' | 'done' | 'error'>;
+  draftError: Record<number, string>;
+
   // Real backend availability, fetched from /api/status on load -- never
   // assumed. Matches the live site's apiStatus gate exactly: real-pipeline
   // behavior only runs when apiStatus.gemini is true; otherwise the app
@@ -142,5 +167,11 @@ export interface AppState {
     softConfirmResolved: boolean;
     interview: InterviewState;
     designSystemSheet: DesignSystemSheet | null;
+
+    // Stage 5 -- Present's output, computed once on the Draft-to-Refine
+    // transition from the real approved sections + design system sheet.
+    // null until then; the canvas falls back to the pre-pipeline static
+    // section list exactly as it did before this stage existed.
+    frames: PresentFrame[] | null;
   };
 }

@@ -62,6 +62,22 @@ export async function callGeminiStructured(contents, schema, maxOutputTokens) {
   return readGeminiResponse(resp);
 }
 
+// Free-text call (no responseSchema) -- used where the prompt itself asks
+// for JSON-shaped prose (e.g. analyze-image's headline/body draft) rather
+// than constraining the response server-side.
+export async function callGemini(contents, maxOutputTokens) {
+  const uri = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+  const resp = await fetch(uri, {
+    method: 'POST',
+    headers: { 'x-goog-api-key': cleanKey(process.env.GEMINI_API_KEY), 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents,
+      generationConfig: { maxOutputTokens },
+    }),
+  });
+  return readGeminiResponse(resp);
+}
+
 export function extractText(result) {
   const candidate = result.candidates && result.candidates[0];
   const text = candidate && candidate.content && candidate.content.parts && candidate.content.parts[0] && candidate.content.parts[0].text;

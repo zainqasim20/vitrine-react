@@ -13,10 +13,15 @@ export function Review() {
   const idx = state.idx;
   const status = state.statuses[idx] || 'pending';
   const draft = DRAFTS[idx % DRAFTS.length];
-  const canApprove = status === 'drafted';
+  const realPipeline = state.apiStatus.gemini;
+  const cap = actions.captionOf(idx);
+  const canApprove = realPipeline ? !!cap.headline.trim() : status === 'drafted';
   const approved = actions.approvedIndices();
   const allDecided = total > 0 && Array.from({ length: total }, (_, i) => state.statuses[i] || 'pending').every((s) => s === 'approved' || s === 'skipped');
-  const hasExtraction = status === 'drafted' || status === 'approved';
+  // Fabricated "extracted" content (hardcoded PALETTE/PATTERNS swatches, a
+  // canned "AI-suggested" insight) with no counterpart in the real site's
+  // renderDraft() -- never shown once the real pipeline is running.
+  const hasExtraction = !realPipeline && (status === 'drafted' || status === 'approved');
   const pad = (n: number) => String(n).padStart(3, '0');
 
   return (
@@ -101,74 +106,78 @@ export function Review() {
             )}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 32 }}>
-            <div style={{ position: 'relative', border: '1px solid var(--border)', borderRadius: 10, background: 'var(--surface-2)', overflow: 'hidden', minHeight: 320 }}>
-              <div style={{ position: 'absolute', inset: 24, background: 'var(--surface)', border: '1px solid var(--border)' }}>
-                <div style={{ height: '14%', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6, padding: '0 4%' }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--border-strong)' }} />
-                  <span style={{ height: 6, width: '22%', background: 'var(--border)' }} />
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '26% 1fr', height: '86%' }}>
-                  <div style={{ borderRight: '1px solid var(--border)', padding: '6%', display: 'flex', flexDirection: 'column', gap: '10%' }}>
-                    <span style={{ height: 6, background: 'var(--border)' }} />
-                    <span style={{ height: 6, background: 'var(--border)' }} />
-                    <span style={{ height: 6, width: '70%', background: 'var(--border)' }} />
+          {realPipeline ? (
+            <RealDraftBody idx={idx} status={status} />
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 32 }}>
+              <div style={{ position: 'relative', border: '1px solid var(--border)', borderRadius: 10, background: 'var(--surface-2)', overflow: 'hidden', minHeight: 320 }}>
+                <div style={{ position: 'absolute', inset: 24, background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                  <div style={{ height: '14%', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6, padding: '0 4%' }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--border-strong)' }} />
+                    <span style={{ height: 6, width: '22%', background: 'var(--border)' }} />
                   </div>
-                  <div style={{ padding: '6%', display: 'flex', flexDirection: 'column', gap: '6%' }}>
-                    <span style={{ height: 12, width: '52%', background: '#14141A' }} />
-                    <span style={{ height: 6, background: 'var(--border)' }} />
-                    <span style={{ height: 6, width: '84%', background: 'var(--border)' }} />
-                    <span style={{ height: '30%', background: 'var(--surface-3)', marginTop: '4%' }} />
+                  <div style={{ display: 'grid', gridTemplateColumns: '26% 1fr', height: '86%' }}>
+                    <div style={{ borderRight: '1px solid var(--border)', padding: '6%', display: 'flex', flexDirection: 'column', gap: '10%' }}>
+                      <span style={{ height: 6, background: 'var(--border)' }} />
+                      <span style={{ height: 6, background: 'var(--border)' }} />
+                      <span style={{ height: 6, width: '70%', background: 'var(--border)' }} />
+                    </div>
+                    <div style={{ padding: '6%', display: 'flex', flexDirection: 'column', gap: '6%' }}>
+                      <span style={{ height: 12, width: '52%', background: '#14141A' }} />
+                      <span style={{ height: 6, background: 'var(--border)' }} />
+                      <span style={{ height: 6, width: '84%', background: 'var(--border)' }} />
+                      <span style={{ height: '30%', background: 'var(--surface-3)', marginTop: '4%' }} />
+                    </div>
                   </div>
                 </div>
-              </div>
-              <span style={{ position: 'absolute', left: 12, top: 12, height: 24, padding: '0 10px', borderRadius: 999, background: '#14141A', color: '#FFFFFF', fontFamily: "'Geist Mono', monospace", fontSize: 11.5, fontWeight: 500, letterSpacing: '0.04em', display: 'inline-flex', alignItems: 'center' }}>
-                {String(idx + 1).padStart(2, '0')}
-              </span>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '8px 0' }}>
-              {status === 'loading' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-2)' }}>Reading the screen and writing a section...</span>
-                  <div style={shimmer(20, '52%')} />
-                  <div style={shimmer(12, '100%')} />
-                  <div style={shimmer(12, '92%')} />
-                  <div style={shimmer(12, '74%')} />
-                </div>
-              )}
-
-              {(status === 'drafted' || status === 'approved') && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, animation: 'v-in 300ms ease-out' }}>
-                  <span style={{ height: 24, padding: '0 10px', borderRadius: 999, background: 'var(--coral-gradient)', color: '#FFFFFF', fontFamily: "'Geist Mono', monospace", fontSize: 11.5, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 5, alignSelf: 'flex-start' }}>
-                    <i className="ph-fill ph-sparkle" style={{ fontSize: 13 }} />
-                    AI draft
-                  </span>
-                  <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 20, lineHeight: 1.3 }}>{draft.headline}</h3>
-                  <p style={{ fontSize: 15, lineHeight: 1.6, color: 'var(--text)' }}>{draft.body}</p>
-                </div>
-              )}
-
-              {status === 'error' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--error)', fontSize: 15, fontWeight: 700 }}>
-                    <i className="ph-fill ph-warning-circle" style={{ fontSize: 20 }} />
-                    This screen did not come back
-                  </span>
-                  <p style={{ fontSize: 15, lineHeight: 1.6, color: 'var(--text-2)' }}>
-                    The file resolved too low to read reliably, so nothing was written rather than guessed. Regenerate, or replace it with a higher-resolution export.
-                  </p>
-                </div>
-              )}
-
-              {status === 'skipped' && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, alignSelf: 'flex-start', color: 'var(--text-3)', fontSize: 13, fontWeight: 700 }}>
-                  <i className="ph ph-minus-circle" style={{ fontSize: 18 }} />
-                  Skipped — left out of the case study
+                <span style={{ position: 'absolute', left: 12, top: 12, height: 24, padding: '0 10px', borderRadius: 999, background: '#14141A', color: '#FFFFFF', fontFamily: "'Geist Mono', monospace", fontSize: 11.5, fontWeight: 500, letterSpacing: '0.04em', display: 'inline-flex', alignItems: 'center' }}>
+                  {String(idx + 1).padStart(2, '0')}
                 </span>
-              )}
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '8px 0' }}>
+                {status === 'loading' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-2)' }}>Reading the screen and writing a section...</span>
+                    <div style={shimmer(20, '52%')} />
+                    <div style={shimmer(12, '100%')} />
+                    <div style={shimmer(12, '92%')} />
+                    <div style={shimmer(12, '74%')} />
+                  </div>
+                )}
+
+                {(status === 'drafted' || status === 'approved') && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, animation: 'v-in 300ms ease-out' }}>
+                    <span style={{ height: 24, padding: '0 10px', borderRadius: 999, background: 'var(--coral-gradient)', color: '#FFFFFF', fontFamily: "'Geist Mono', monospace", fontSize: 11.5, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 5, alignSelf: 'flex-start' }}>
+                      <i className="ph-fill ph-sparkle" style={{ fontSize: 13 }} />
+                      AI draft
+                    </span>
+                    <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 20, lineHeight: 1.3 }}>{draft.headline}</h3>
+                    <p style={{ fontSize: 15, lineHeight: 1.6, color: 'var(--text)' }}>{draft.body}</p>
+                  </div>
+                )}
+
+                {status === 'error' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--error)', fontSize: 15, fontWeight: 700 }}>
+                      <i className="ph-fill ph-warning-circle" style={{ fontSize: 20 }} />
+                      This screen did not come back
+                    </span>
+                    <p style={{ fontSize: 15, lineHeight: 1.6, color: 'var(--text-2)' }}>
+                      The file resolved too low to read reliably, so nothing was written rather than guessed. Regenerate, or replace it with a higher-resolution export.
+                    </p>
+                  </div>
+                )}
+
+                {status === 'skipped' && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, alignSelf: 'flex-start', color: 'var(--text-3)', fontSize: 13, fontWeight: 700 }}>
+                    <i className="ph ph-minus-circle" style={{ fontSize: 18 }} />
+                    Skipped — left out of the case study
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {hasExtraction && (
             <button
@@ -270,7 +279,7 @@ export function Review() {
             </button>
             <button
               type="button"
-              onClick={() => actions.regenerate()}
+              onClick={() => (realPipeline ? actions.regenerateDraft() : actions.regenerate())}
               style={{ height: 48, padding: '0 20px', border: '1.5px solid var(--border)', borderRadius: 10, background: 'transparent', color: 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 15, cursor: 'pointer' }}
             >
               Regenerate
@@ -328,6 +337,128 @@ export function Review() {
       </div>
       <ClarifyingQuestion />
     </main>
+  );
+}
+
+// Real per-image draft state, ported from the live site's renderDraft():
+// real screenshot, real loading/error states from the actual Gemini call,
+// an "AI draft" badge only once genuinely drafted, a manual "Draft this
+// with AI" link otherwise, and the same editable headline/body fields the
+// draft (or the designer's own typing) lands in either way.
+function RealDraftBody({ idx, status }: { idx: number; status: string }) {
+  const { state, actions } = useApp();
+  const file = state.files[idx];
+  const cap = actions.captionOf(idx);
+  const drafting = state.draftStatus[idx] === 'loading';
+  const draftFailed = state.draftStatus[idx] === 'error';
+  const isAiDraft = state.captionSource[idx] === 'ai';
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 32 }}>
+      <div style={{ position: 'relative', border: '1px solid var(--border)', borderRadius: 10, background: 'var(--surface-2)', overflow: 'hidden', minHeight: 320, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {file?.url && <img src={file.url} alt={file.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
+        <span style={{ position: 'absolute', left: 12, top: 12, height: 24, padding: '0 10px', borderRadius: 999, background: '#14141A', color: '#FFFFFF', fontFamily: "'Geist Mono', monospace", fontSize: 11.5, fontWeight: 500, letterSpacing: '0.04em', display: 'inline-flex', alignItems: 'center' }}>
+          {String(idx + 1).padStart(2, '0')}
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '8px 0' }}>
+        {drafting ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-2)' }}>Reading the screen and writing a section with Gemini…</span>
+            <div style={shimmer(20, '52%')} />
+            <div style={shimmer(12, '100%')} />
+            <div style={shimmer(12, '92%')} />
+            <div style={shimmer(12, '74%')} />
+          </div>
+        ) : (
+          <>
+            {draftFailed ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--error)', fontSize: 15, fontWeight: 700 }}>
+                  <i className="ph-fill ph-warning-circle" style={{ fontSize: 20 }} />
+                  The AI draft didn't come back
+                </span>
+                <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: 'var(--text-2)' }}>
+                  {state.draftError[idx] || 'The Gemini request failed.'} You can write this section yourself below, or try again.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => actions.regenerateDraft()}
+                  style={{ alignSelf: 'flex-start', height: 34, padding: '0 12px', border: '1px solid var(--border)', borderRadius: 999, background: 'transparent', color: 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                >
+                  <i className="ph ph-arrow-clockwise" style={{ fontSize: 14 }} />
+                  Try again
+                </button>
+              </div>
+            ) : isAiDraft ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ height: 24, padding: '0 10px', borderRadius: 999, background: 'var(--coral-gradient)', color: '#FFFFFF', fontFamily: "'Geist Mono', monospace", fontSize: 11.5, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <i className="ph-fill ph-sparkle" style={{ fontSize: 13 }} />
+                  AI draft — from this image
+                </span>
+                <button
+                  type="button"
+                  onClick={() => actions.regenerateDraft()}
+                  style={{ height: 28, padding: 0, border: 0, background: 'transparent', color: 'var(--text-3)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 500, fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}
+                >
+                  Regenerate
+                </button>
+              </div>
+            ) : (
+              state.apiStatus.gemini &&
+              !cap.headline && (
+                <button
+                  type="button"
+                  onClick={() => actions.regenerateDraft()}
+                  style={{ alignSelf: 'flex-start', height: 32, padding: 0, border: 0, background: 'transparent', color: 'var(--violet)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 14, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                >
+                  <i className="ph-fill ph-sparkle" style={{ fontSize: 14 }} />
+                  Draft this with AI
+                </button>
+              )
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 11.5, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--text-3)' }}>Write this section</span>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)' }}>Headline</span>
+                <input
+                  type="text"
+                  value={cap.headline}
+                  onChange={(e) => actions.setCaption(idx, 'headline', e.target.value)}
+                  placeholder="e.g. A first run that asks for nothing"
+                  style={{ height: 44, padding: '0 14px', border: '1.5px solid var(--border)', borderRadius: 10, background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 14, outline: 'none' }}
+                />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)' }}>Body</span>
+                <textarea
+                  value={cap.body}
+                  onChange={(e) => actions.setCaption(idx, 'body', e.target.value)}
+                  placeholder="A sentence or two about this screen — the decision behind it, what it does, why it matters."
+                  rows={4}
+                  style={{ padding: '12px 14px', border: '1.5px solid var(--border)', borderRadius: 10, background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 14, lineHeight: 1.6, outline: 'none', resize: 'vertical' }}
+                />
+              </label>
+            </div>
+          </>
+        )}
+
+        {status === 'skipped' && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, alignSelf: 'flex-start', color: 'var(--text-3)', fontSize: 13, fontWeight: 700 }}>
+            <i className="ph ph-minus-circle" style={{ fontSize: 18 }} />
+            Skipped — left out of the case study
+          </span>
+        )}
+        {status === 'approved' && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, alignSelf: 'flex-start', color: 'var(--success)', fontSize: 13, fontWeight: 700 }}>
+            <i className="ph-fill ph-check-circle" style={{ fontSize: 18 }} />
+            Approved
+          </span>
+        )}
+      </div>
+    </div>
   );
 }
 

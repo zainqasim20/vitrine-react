@@ -88,14 +88,7 @@ export function Create() {
                     style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
                   >
                     <div style={{ position: 'relative', aspectRatio: '16 / 10', border: '1px solid var(--border)', borderRadius: 10, background: 'var(--surface-2)', overflow: 'hidden' }}>
-                      <div style={{ position: 'absolute', inset: 12, background: 'var(--surface)', border: '1px solid var(--border)' }}>
-                        <div style={{ height: '16%', borderBottom: '1px solid var(--border)' }} />
-                        <div style={{ padding: '10%', display: 'flex', flexDirection: 'column', gap: '8%' }}>
-                          <span style={{ display: 'block', height: 8, width: '54%', background: '#14141A' }} />
-                          <span style={{ display: 'block', height: 5, background: 'var(--border)' }} />
-                          <span style={{ display: 'block', height: 5, width: '76%', background: 'var(--border)' }} />
-                        </div>
-                      </div>
+                      {f.url && <img src={f.url} alt={f.name} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
                       <span style={{ position: 'absolute', left: 8, top: 8, height: 24, padding: '0 10px', borderRadius: 999, background: '#14141A', color: '#FFFFFF', fontFamily: "'Geist Mono', monospace", fontSize: 11.5, fontWeight: 500, letterSpacing: '0.04em', display: 'inline-flex', alignItems: 'center' }}>
                         {String(i + 1).padStart(2, '0')}
                       </span>

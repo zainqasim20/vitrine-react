@@ -1,0 +1,53 @@
+{
+  "_comment": "Transcribed from docs/ai-system-prompt.md Part 5.1. Data only -- present.ts reads this, no per-category frame logic is hardcoded in code.",
+
+  "frameLabels": {
+    "cover-overview": "Cover / Overview",
+    "design-system": "Design System",
+    "key-features": "Key Features",
+    "user-journey": "User Journey",
+    "highlights-comparison": "Highlights / Comparison",
+    "responsive-variant": "Responsive Variant",
+    "device-mockup-set": "Device Mockup Set",
+    "closing": "Closing",
+    "metrics": "Metrics"
+  },
+
+  "sequences": {
+    "web-ui": {
+      "required": ["cover-overview", "design-system", "key-features", "user-journey"],
+      "recommended": ["highlights-comparison", "responsive-variant"],
+      "optional": ["closing", "metrics"]
+    },
+    "mobile-app": {
+      "required": ["cover-overview", "design-system", "key-features", "user-journey"],
+      "recommended": ["device-mockup-set"],
+      "optional": ["closing", "metrics"]
+    },
+    "product-design": {
+      "required": ["cover-overview", "design-system", "key-features"],
+      "recommended": ["highlights-comparison"],
+      "optional": ["user-journey", "closing"]
+    },
+    "branding": {
+      "required": ["cover-overview", "design-system"],
+      "recommended": ["highlights-comparison"],
+      "optional": ["key-features", "closing"]
+    },
+    "graphic-design": {
+      "required": ["cover-overview", "key-features"],
+      "recommended": ["highlights-comparison"],
+      "optional": ["design-system", "closing"]
+    },
+    "illustration": {
+      "required": ["cover-overview", "key-features"],
+      "recommended": ["highlights-comparison"],
+      "optional": ["design-system", "user-journey", "closing"]
+    },
+    "architecture": {
+      "required": ["cover-overview", "key-features"],
+      "recommended": ["highlights-comparison"],
+      "optional": ["design-system", "user-journey", "closing"]
+    }
+  }
+}

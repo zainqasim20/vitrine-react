@@ -1,7 +1,9 @@
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useApp } from '../lib/store';
+import { useApp, type AppActions } from '../lib/store';
 import { DRAFTS, JOURNEY, MOTION_PRESETS, MOTION_TRIGGERS, PALETTE, PATTERNS } from '../lib/data';
+import type { AppState, CanvasSection } from '../lib/types';
+import type { DesignSystemSheet } from '../lib/pipeline/types';
 
 const SPEED_SCALE: Record<string, number> = { '0.5x': 2, '1x': 1, '1.5x': 0.7, '2x': 0.5 };
 const EASE_CSS: Record<string, string> = { Linear: 'linear', Ease: 'ease-in-out', Bounce: 'cubic-bezier(.34,1.56,.64,1)' };
@@ -50,6 +52,13 @@ export function Refine() {
       </main>
     );
   }
+
+  // Real content when the pipeline actually ran (Design System sheet +
+  // canvas sections from Present) -- the mock DRAFTS/PALETTE/PATTERNS path
+  // stays exactly as it was before this pipeline existed otherwise.
+  const usingRealSections = state.apiStatus.gemini;
+  const realSections: CanvasSection[] | null = usingRealSections ? actions.canvasSections() : null;
+  const realFeatureSections = realSections?.filter((sec) => sec.kind !== 'design-system') || null;
 
   const sel = state.sel;
   const kind = typeOf(sel);
@@ -143,124 +152,149 @@ export function Refine() {
         </div>
 
         <SectionRule label="Design system" />
-        <div style={{ border: '1px solid var(--border)', borderRadius: 16, padding: 24, display: 'flex', flexDirection: 'column', gap: 20, marginBottom: 48 }}>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            {PALETTE.map((hex) => (
-              <div key={hex} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <span style={{ width: 72, height: 48, borderRadius: 10, border: '1px solid var(--border)', background: hex, display: 'block' }} />
-                <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 11.5, letterSpacing: '0.04em', color: 'var(--text-2)' }}>{hex}</span>
+        {usingRealSections && state.pipeline.designSystemSheet ? (
+          <RealDesignSystemBlock sheet={state.pipeline.designSystemSheet} />
+        ) : (
+          <div style={{ border: '1px solid var(--border)', borderRadius: 16, padding: 24, display: 'flex', flexDirection: 'column', gap: 20, marginBottom: 48 }}>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              {PALETTE.map((hex) => (
+                <div key={hex} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <span style={{ width: 72, height: 48, borderRadius: 10, border: '1px solid var(--border)', background: hex, display: 'block' }} />
+                  <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 11.5, letterSpacing: '0.04em', color: 'var(--text-2)' }}>{hex}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 20, paddingTop: 20, borderTop: '1px solid var(--border)' }}>
+              <span style={{ fontFamily: "'Bricolage Grotesque', sans-serif", fontWeight: 600, fontSize: 56, lineHeight: 1, letterSpacing: '-0.03em' }}>Aa</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={{ fontSize: 15, fontWeight: 700 }}>Geometric sans · Semibold 600</span>
+                <span style={mono()}>Headings −3% tracking · Body 400 / 1.6</span>
               </div>
-            ))}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 20, paddingTop: 20, borderTop: '1px solid var(--border)' }}>
-            <span style={{ fontFamily: "'Bricolage Grotesque', sans-serif", fontWeight: 600, fontSize: 56, lineHeight: 1, letterSpacing: '-0.03em' }}>Aa</span>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <span style={{ fontSize: 15, fontWeight: 700 }}>Geometric sans · Semibold 600</span>
-              <span style={mono()}>Headings −3% tracking · Body 400 / 1.6</span>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 20, borderTop: '1px solid var(--border)' }}>
+              {PATTERNS.map((p) => (
+                <span key={p.label} style={{ height: 28, padding: '0 12px', border: '1px solid var(--border)', borderRadius: 999, background: 'var(--surface-2)', color: 'var(--text-2)', fontSize: 13, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <i className={p.icon} style={{ fontSize: 14, color: 'var(--text-3)' }} />
+                  {p.label}
+                </span>
+              ))}
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 20, borderTop: '1px solid var(--border)' }}>
-            {PATTERNS.map((p) => (
-              <span key={p.label} style={{ height: 28, padding: '0 12px', border: '1px solid var(--border)', borderRadius: 999, background: 'var(--surface-2)', color: 'var(--text-2)', fontSize: 13, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <i className={p.icon} style={{ fontSize: 14, color: 'var(--text-3)' }} />
-                {p.label}
-              </span>
-            ))}
-          </div>
-        </div>
+        )}
 
         <SectionRule label="Key features" />
         <div style={state.prevLay === 'grid' ? { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', columnGap: 32 } : { display: 'block' }}>
-          {approved.map((i) => {
-            const id = `s${i}`;
-            const d = DRAFTS[i % DRAFTS.length];
-            const sz = actions.sizeOf(id);
-            const hovered = state.hover === id;
-            const selImg = sel === `${id}-img`;
-            const selHead = sel === `${id}-head`;
-            const selBody = sel === `${id}-body`;
+          {usingRealSections
+            ? realFeatureSections!.map((sec) =>
+                sec.kind === 'generated' ? (
+                  <GeneratedSectionBlock key={sec.id} label={sec.label} headline={sec.headline} body={sec.body} editorial={editorial} />
+                ) : (
+                  <RealImageSectionBlock
+                    key={sec.id}
+                    id={sec.id}
+                    fileUrl={sec.file.url}
+                    fileName={sec.file.name}
+                    headline={sec.headline}
+                    body={sec.body}
+                    fits={fits}
+                    editorial={editorial}
+                    state={state}
+                    actions={actions}
+                    sel={sel}
+                    resizer={resizer}
+                  />
+                ),
+              )
+            : approved.map((i) => {
+                const id = `s${i}`;
+                const d = DRAFTS[i % DRAFTS.length];
+                const sz = actions.sizeOf(id);
+                const hovered = state.hover === id;
+                const selImg = sel === `${id}-img`;
+                const selHead = sel === `${id}-head`;
+                const selBody = sel === `${id}-body`;
 
-            return (
-              <div
-                key={id}
-                onMouseEnter={() => actions.setHover(id)}
-                onMouseLeave={() => actions.setHover(null)}
-                style={{ position: 'relative', paddingBottom: 48, ...(editorial ? { display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 28, alignItems: 'start' } : {}) }}
-              >
-                {hovered && (
-                  <span style={{ position: 'absolute', top: 2, left: -34, width: 24, height: 32, borderRadius: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-3)', cursor: 'grab', background: 'var(--surface-2)' }}>
-                    <i className="ph ph-dots-six-vertical" style={{ fontSize: 18 }} />
-                  </span>
-                )}
-
-                <div onClick={(e) => { stop(e); actions.select(`${id}-img`); }} style={{ position: 'relative', marginBottom: 24, cursor: 'pointer', gridRow: editorial ? 'span 2' : 'auto' }}>
+                return (
                   <div
-                    style={{
-                      position: 'relative',
-                      width: fits ? sz.w : '100%',
-                      height: sz.h,
-                      maxWidth: '100%',
-                      border: '1px solid var(--border)',
-                      borderRadius: 10,
-                      background: 'var(--surface-2)',
-                      overflow: 'hidden',
-                      filter: `brightness(${state.adjB}%) contrast(${state.adjC}%) saturate(${state.adjS}%)`,
-                    }}
+                    key={id}
+                    onMouseEnter={() => actions.setHover(id)}
+                    onMouseLeave={() => actions.setHover(null)}
+                    style={{ position: 'relative', paddingBottom: 48, ...(editorial ? { display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 28, alignItems: 'start' } : {}) }}
                   >
-                    <div style={{ position: 'absolute', inset: 16, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4 }}>
-                      <div style={{ height: 32, borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px' }}>
-                        <span style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--border)' }} />
-                        <span style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--border)' }} />
-                        <span style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--border)' }} />
-                      </div>
-                      <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                        <span style={{ display: 'block', height: 12, width: '48%', background: '#14141A' }} />
-                        <span style={{ display: 'block', height: 7, background: 'var(--border)' }} />
-                        <span style={{ display: 'block', height: 7, width: '82%', background: 'var(--border)' }} />
-                        <span style={{ display: 'block', height: 7, width: '64%', background: 'var(--border)' }} />
-                        <span style={{ display: 'block', height: 28, width: 108, borderRadius: 8, background: 'rgba(122,71,245,0.16)', marginTop: 8 }} />
-                      </div>
-                    </div>
-                  </div>
+                    {hovered && (
+                      <span style={{ position: 'absolute', top: 2, left: -34, width: 24, height: 32, borderRadius: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-3)', cursor: 'grab', background: 'var(--surface-2)' }}>
+                        <i className="ph ph-dots-six-vertical" style={{ fontSize: 18 }} />
+                      </span>
+                    )}
 
-                  {selImg && (
-                    <>
-                      <span style={{ ...pickTag(-26), whiteSpace: 'nowrap' }}>Screenshot · {sz.w} × {sz.h}</span>
-                      {!fits && <span style={{ position: 'absolute', top: -1.5, left: -1.5, right: -1.5, height: sz.h + 3, border: '1.5px solid var(--violet)', borderRadius: 10, pointerEvents: 'none' }} />}
-                      {fits && (
+                    <div onClick={(e) => { stop(e); actions.select(`${id}-img`); }} style={{ position: 'relative', marginBottom: 24, cursor: 'pointer', gridRow: editorial ? 'span 2' : 'auto' }}>
+                      <div
+                        style={{
+                          position: 'relative',
+                          width: fits ? sz.w : '100%',
+                          height: sz.h,
+                          maxWidth: '100%',
+                          border: '1px solid var(--border)',
+                          borderRadius: 10,
+                          background: 'var(--surface-2)',
+                          overflow: 'hidden',
+                          filter: `brightness(${state.adjB}%) contrast(${state.adjC}%) saturate(${state.adjS}%)`,
+                        }}
+                      >
+                        <div style={{ position: 'absolute', inset: 16, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4 }}>
+                          <div style={{ height: 32, borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px' }}>
+                            <span style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--border)' }} />
+                            <span style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--border)' }} />
+                            <span style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--border)' }} />
+                          </div>
+                          <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            <span style={{ display: 'block', height: 12, width: '48%', background: '#14141A' }} />
+                            <span style={{ display: 'block', height: 7, background: 'var(--border)' }} />
+                            <span style={{ display: 'block', height: 7, width: '82%', background: 'var(--border)' }} />
+                            <span style={{ display: 'block', height: 7, width: '64%', background: 'var(--border)' }} />
+                            <span style={{ display: 'block', height: 28, width: 108, borderRadius: 8, background: 'rgba(122,71,245,0.16)', marginTop: 8 }} />
+                          </div>
+                        </div>
+                      </div>
+
+                      {selImg && (
                         <>
-                          <span style={{ position: 'absolute', top: -1.5, left: -1.5, width: sz.w + 3, height: sz.h + 3, border: '1.5px solid var(--violet)', borderRadius: 10, pointerEvents: 'none' }} />
-                          {handleSpots(sz).map((h) => (
-                            <span key={h.key} onPointerDown={resizer(`${id}-img`, h.dx, h.dy)} style={{ position: 'absolute', top: h.top, left: h.left, width: 10, height: 10, border: '1.5px solid var(--violet)', borderRadius: 2, background: 'var(--surface)', cursor: h.cursor }} />
-                          ))}
+                          <span style={{ ...pickTag(-26), whiteSpace: 'nowrap' }}>Screenshot · {sz.w} × {sz.h}</span>
+                          {!fits && <span style={{ position: 'absolute', top: -1.5, left: -1.5, right: -1.5, height: sz.h + 3, border: '1.5px solid var(--violet)', borderRadius: 10, pointerEvents: 'none' }} />}
+                          {fits && (
+                            <>
+                              <span style={{ position: 'absolute', top: -1.5, left: -1.5, width: sz.w + 3, height: sz.h + 3, border: '1.5px solid var(--violet)', borderRadius: 10, pointerEvents: 'none' }} />
+                              {handleSpots(sz).map((h) => (
+                                <span key={h.key} onPointerDown={resizer(`${id}-img`, h.dx, h.dy)} style={{ position: 'absolute', top: h.top, left: h.left, width: 10, height: 10, border: '1.5px solid var(--violet)', borderRadius: 2, background: 'var(--surface)', cursor: h.cursor }} />
+                              ))}
+                            </>
+                          )}
                         </>
                       )}
-                    </>
-                  )}
-                </div>
+                    </div>
 
-                <div onClick={(e) => { stop(e); actions.select(`${id}-head`); }} style={{ position: 'relative', cursor: 'pointer', marginBottom: 12 }}>
-                  <h3 style={{ fontFamily: "'Bricolage Grotesque', sans-serif", fontWeight: 600, fontSize: 28, lineHeight: 1.2, letterSpacing: '-0.02em' }}>{d.headline}</h3>
-                  {selHead && (
-                    <>
-                      <span style={{ position: 'absolute', inset: '-6px -8px', border: '1.5px solid var(--violet)', borderRadius: 8, boxShadow: '0 0 0 4px rgba(122,71,245,0.12)', pointerEvents: 'none' }} />
-                      <span style={{ ...pickTag(-28), whiteSpace: 'nowrap' }}>Headline · H2</span>
-                    </>
-                  )}
-                </div>
+                    <div onClick={(e) => { stop(e); actions.select(`${id}-head`); }} style={{ position: 'relative', cursor: 'pointer', marginBottom: 12 }}>
+                      <h3 style={{ fontFamily: "'Bricolage Grotesque', sans-serif", fontWeight: 600, fontSize: 28, lineHeight: 1.2, letterSpacing: '-0.02em' }}>{d.headline}</h3>
+                      {selHead && (
+                        <>
+                          <span style={{ position: 'absolute', inset: '-6px -8px', border: '1.5px solid var(--violet)', borderRadius: 8, boxShadow: '0 0 0 4px rgba(122,71,245,0.12)', pointerEvents: 'none' }} />
+                          <span style={{ ...pickTag(-28), whiteSpace: 'nowrap' }}>Headline · H2</span>
+                        </>
+                      )}
+                    </div>
 
-                <div onClick={(e) => { stop(e); actions.select(`${id}-body`); }} style={{ position: 'relative', cursor: 'pointer' }}>
-                  <p style={{ fontSize: 17, lineHeight: 1.6, color: 'var(--text-2)' }}>{d.body}</p>
-                  {selBody && (
-                    <>
-                      <span style={{ position: 'absolute', inset: '-6px -8px', border: '1.5px solid var(--violet)', borderRadius: 8, boxShadow: '0 0 0 4px rgba(122,71,245,0.12)', pointerEvents: 'none' }} />
-                      <span style={{ ...pickTag(-28), whiteSpace: 'nowrap' }}>Body</span>
-                    </>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+                    <div onClick={(e) => { stop(e); actions.select(`${id}-body`); }} style={{ position: 'relative', cursor: 'pointer' }}>
+                      <p style={{ fontSize: 17, lineHeight: 1.6, color: 'var(--text-2)' }}>{d.body}</p>
+                      {selBody && (
+                        <>
+                          <span style={{ position: 'absolute', inset: '-6px -8px', border: '1.5px solid var(--violet)', borderRadius: 8, boxShadow: '0 0 0 4px rgba(122,71,245,0.12)', pointerEvents: 'none' }} />
+                          <span style={{ ...pickTag(-28), whiteSpace: 'nowrap' }}>Body</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
         </div>
 
         <SectionRule label="User journey" />
@@ -729,6 +763,172 @@ export function Refine() {
         </div>
       </div>
     </main>
+  );
+}
+
+// Real Design System block -- the actual extracted sheet from Extract,
+// same fields as the editable Design System screen, read-only here.
+function RealDesignSystemBlock({ sheet }: { sheet: DesignSystemSheet }) {
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 16, padding: 24, display: 'flex', flexDirection: 'column', gap: 20, marginBottom: 48 }}>
+      {sheet.colors.length > 0 && (
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {sheet.colors.slice(0, 8).map((c) => (
+            <div key={c.hex} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span style={{ width: 72, height: 48, borderRadius: 10, border: '1px solid var(--border)', background: c.hex, display: 'block' }} title={c.role} />
+              <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 11.5, letterSpacing: '0.04em', color: 'var(--text-2)' }}>{c.hex}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {sheet.typography.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: sheet.colors.length ? 20 : 0, borderTop: sheet.colors.length ? '1px solid var(--border)' : 'none' }}>
+          {sheet.typography.map((t) => (
+            <div key={t.role} style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, textTransform: 'capitalize', width: 64, flex: 'none' }}>{t.role}</span>
+              <span style={mono()}>
+                ~{t.approxPx}px{t.styleDescription ? ` · ${t.styleDescription}` : ''}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {Object.entries(sheet.components).some(([, v]) => v.count > 0) && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 20, borderTop: '1px solid var(--border)' }}>
+          {Object.entries(sheet.components)
+            .filter(([, v]) => v.count > 0)
+            .map(([k, v]) => (
+              <span key={k} style={{ height: 28, padding: '0 12px', border: '1px solid var(--border)', borderRadius: 999, background: 'var(--surface-2)', color: 'var(--text-2)', fontSize: 13, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 6, textTransform: 'capitalize' }}>
+                {k} · {v.count}
+              </span>
+            ))}
+        </div>
+      )}
+      {!sheet.colors.length && !sheet.typography.length && !Object.values(sheet.components).some((v) => v.count > 0) && (
+        <span style={{ fontSize: 14, color: 'var(--text-3)' }}>Nothing was confidently extracted from these screens.</span>
+      )}
+    </div>
+  );
+}
+
+// Present's generated placeholder for a required slot with no matching
+// uploaded screen -- real content synthesized from the real design system
+// sheet, always tagged so it's never mistaken for a real screenshot.
+function GeneratedSectionBlock({ label, headline, body, editorial }: { label: string; headline: string; body: string; editorial: boolean }) {
+  return (
+    <div style={{ position: 'relative', paddingBottom: 48, ...(editorial ? { display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 28, alignItems: 'start' } : {}) }}>
+      <div style={{ position: 'relative', marginBottom: 24, height: 200, border: '1.5px dashed var(--border)', borderRadius: 10, background: 'var(--surface-2)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, gridRow: editorial ? 'span 2' : 'auto' }}>
+        <i className="ph ph-image-square" style={{ fontSize: 28, color: 'var(--text-3)' }} />
+        <span style={{ height: 22, padding: '0 10px', borderRadius: 999, background: 'var(--violet-gradient)', color: '#FFFFFF', fontFamily: "'Geist Mono', monospace", fontSize: 11, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+          <i className="ph-fill ph-sparkle" style={{ fontSize: 11 }} />
+          AI-generated — no {label.toLowerCase()} screen uploaded
+        </span>
+      </div>
+      <h3 style={{ fontFamily: "'Bricolage Grotesque', sans-serif", fontWeight: 600, fontSize: 28, lineHeight: 1.2, letterSpacing: '-0.02em', marginBottom: 12 }}>{headline}</h3>
+      <p style={{ fontSize: 17, lineHeight: 1.6, color: 'var(--text-2)' }}>{body}</p>
+    </div>
+  );
+}
+
+// Real image section -- same select/resize mechanics as the mock path
+// (sec.id already matches the 's<fileIdx>' convention those use), fed by
+// the real uploaded screenshot and the real caption from Draft/Review.
+function RealImageSectionBlock({
+  id,
+  fileUrl,
+  fileName,
+  headline,
+  body,
+  fits,
+  editorial,
+  state,
+  actions,
+  sel,
+  resizer,
+}: {
+  id: string;
+  fileUrl?: string;
+  fileName: string;
+  headline: string;
+  body: string;
+  fits: boolean;
+  editorial: boolean;
+  state: AppState;
+  actions: AppActions;
+  sel: string | null;
+  resizer: (id: string, dx: number, dy: number) => (e: ReactPointerEvent) => void;
+}) {
+  const sz = actions.sizeOf(id);
+  const hovered = state.hover === id;
+  const selImg = sel === `${id}-img`;
+  const selHead = sel === `${id}-head`;
+  const selBody = sel === `${id}-body`;
+
+  return (
+    <div
+      onMouseEnter={() => actions.setHover(id)}
+      onMouseLeave={() => actions.setHover(null)}
+      style={{ position: 'relative', paddingBottom: 48, ...(editorial ? { display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 28, alignItems: 'start' } : {}) }}
+    >
+      {hovered && (
+        <span style={{ position: 'absolute', top: 2, left: -34, width: 24, height: 32, borderRadius: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-3)', cursor: 'grab', background: 'var(--surface-2)' }}>
+          <i className="ph ph-dots-six-vertical" style={{ fontSize: 18 }} />
+        </span>
+      )}
+
+      <div onClick={(e) => { stop(e); actions.select(`${id}-img`); }} style={{ position: 'relative', marginBottom: 24, cursor: 'pointer', gridRow: editorial ? 'span 2' : 'auto' }}>
+        <div
+          style={{
+            position: 'relative',
+            width: fits ? sz.w : '100%',
+            height: sz.h,
+            maxWidth: '100%',
+            border: '1px solid var(--border)',
+            borderRadius: 10,
+            background: 'var(--surface-2)',
+            overflow: 'hidden',
+            filter: `brightness(${state.adjB}%) contrast(${state.adjC}%) saturate(${state.adjS}%)`,
+          }}
+        >
+          {fileUrl && <img src={fileUrl} alt={fileName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+        </div>
+
+        {selImg && (
+          <>
+            <span style={{ ...pickTag(-26), whiteSpace: 'nowrap' }}>Screenshot · {sz.w} × {sz.h}</span>
+            {!fits && <span style={{ position: 'absolute', top: -1.5, left: -1.5, right: -1.5, height: sz.h + 3, border: '1.5px solid var(--violet)', borderRadius: 10, pointerEvents: 'none' }} />}
+            {fits && (
+              <>
+                <span style={{ position: 'absolute', top: -1.5, left: -1.5, width: sz.w + 3, height: sz.h + 3, border: '1.5px solid var(--violet)', borderRadius: 10, pointerEvents: 'none' }} />
+                {handleSpots(sz).map((h) => (
+                  <span key={h.key} onPointerDown={resizer(`${id}-img`, h.dx, h.dy)} style={{ position: 'absolute', top: h.top, left: h.left, width: 10, height: 10, border: '1.5px solid var(--violet)', borderRadius: 2, background: 'var(--surface)', cursor: h.cursor }} />
+                ))}
+              </>
+            )}
+          </>
+        )}
+      </div>
+
+      <div onClick={(e) => { stop(e); actions.select(`${id}-head`); }} style={{ position: 'relative', cursor: 'pointer', marginBottom: 12 }}>
+        <h3 style={{ fontFamily: "'Bricolage Grotesque', sans-serif", fontWeight: 600, fontSize: 28, lineHeight: 1.2, letterSpacing: '-0.02em' }}>{headline}</h3>
+        {selHead && (
+          <>
+            <span style={{ position: 'absolute', inset: '-6px -8px', border: '1.5px solid var(--violet)', borderRadius: 8, boxShadow: '0 0 0 4px rgba(122,71,245,0.12)', pointerEvents: 'none' }} />
+            <span style={{ ...pickTag(-28), whiteSpace: 'nowrap' }}>Headline · H2</span>
+          </>
+        )}
+      </div>
+
+      <div onClick={(e) => { stop(e); actions.select(`${id}-body`); }} style={{ position: 'relative', cursor: 'pointer' }}>
+        <p style={{ fontSize: 17, lineHeight: 1.6, color: 'var(--text-2)' }}>{body}</p>
+        {selBody && (
+          <>
+            <span style={{ position: 'absolute', inset: '-6px -8px', border: '1.5px solid var(--violet)', borderRadius: 8, boxShadow: '0 0 0 4px rgba(122,71,245,0.12)', pointerEvents: 'none' }} />
+            <span style={{ ...pickTag(-28), whiteSpace: 'nowrap' }}>Body</span>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 

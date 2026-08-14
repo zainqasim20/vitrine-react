@@ -5,11 +5,15 @@ import { DRAFTS } from './data';
 import { classifyRecords } from './pipeline/classify';
 import { perceiveImage } from './pipeline/perceive';
 import { buildDesignSystemSheet } from './pipeline/extract';
+import { assembleFrames } from './pipeline/present';
+import { draftCaption } from './pipeline/draft';
 import categorySignals from './pipeline/config/category-signals.json';
-import type { CategorySignalsConfig } from './pipeline/types';
-import type { ClientStatus } from './types';
+import moduleSequences from './pipeline/config/module-sequences.json';
+import type { ApprovedSection, CategorySignalsConfig, ModuleSequencesConfig, PresentFrame } from './pipeline/types';
+import type { Caption, CanvasSection, ClientStatus } from './types';
 
 const PIPELINE_CONFIG = categorySignals as unknown as CategorySignalsConfig;
+const MODULE_SEQUENCES = moduleSequences as unknown as ModuleSequencesConfig;
 
 // Same reasoning as the live site's maybeDraftAI/perceiveAllFiles: don't send
 // an image the platform's request-body limit will reject. Vercel's Node
@@ -35,6 +39,26 @@ function fileToBase64(file: File): Promise<string> {
 function formatFileSize(bytes: number) {
   const mb = bytes / (1024 * 1024);
   return `${mb % 1 === 0 ? mb : mb.toFixed(1)} MB`;
+}
+
+// Ported unchanged from the live site's parseDraftJson: /api/analyze-image's
+// prompt asks Gemini for JSON but doesn't constrain the response server-side
+// (unlike Perceive's schema-based call), so the model's own text sometimes
+// wraps it in a code fence -- stripped here, never shown as a raw parse error.
+function parseDraftJson(raw: string): Caption {
+  let text = String(raw || '').trim();
+  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) text = fence[1].trim();
+  let obj: { headline?: string; body?: string };
+  try {
+    obj = JSON.parse(text);
+  } catch {
+    throw new Error('The model returned something we could not read. Try again, or write this section yourself.');
+  }
+  const headline = String(obj.headline || '').trim();
+  const body = String(obj.body || '').trim();
+  if (!headline || !body) throw new Error('The model returned an incomplete response');
+  return { headline, body };
 }
 
 // Ported from the live site's seedInterviewDefaults: pre-fills the
@@ -131,6 +155,11 @@ const initialState: AppState = {
   published: false,
   dlSel: {},
 
+  captions: {},
+  captionSource: {},
+  draftStatus: {},
+  draftError: {},
+
   apiStatus: { gemini: false, checked: false },
   pipeline: {
     perceiveRecords: {},
@@ -155,6 +184,7 @@ const initialState: AppState = {
       skipped: false,
     },
     designSystemSheet: null,
+    frames: null,
   },
 };
 
@@ -194,6 +224,11 @@ export interface AppActions {
 
   generate: () => void;
   finishWaiting: () => void;
+
+  captionOf: (i: number) => Caption;
+  setCaption: (i: number, field: 'headline' | 'body', value: string) => void;
+  maybeDraftAI: (i: number) => void;
+  regenerateDraft: () => void;
 
   pickFallbackCategory: (catId: string) => void;
   setFallbackOtherText: (text: string) => void;
@@ -322,6 +357,8 @@ export interface AppActions {
   dropSuggestion: () => void;
 
   approvedIndices: () => number[];
+  approvedSections: () => ApprovedSection[];
+  canvasSections: () => CanvasSection[];
   mdSource: () => string;
 }
 
@@ -348,6 +385,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const loadTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const variantTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const draftTokens = useRef<Record<number, number>>({});
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', state.theme);
@@ -418,7 +456,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     (incoming: File[]) => {
       patch((s) => {
         const room = Math.max(0, 20 - s.files.length);
-        const additions = incoming.slice(0, room).map((f) => ({ id: nextId(), name: f.name, file: f, mimeType: f.type }));
+        const additions = incoming.slice(0, room).map((f) => ({ id: nextId(), name: f.name, file: f, mimeType: f.type, url: URL.createObjectURL(f) }));
         return { files: [...s.files, ...additions] };
       });
     },
@@ -427,7 +465,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const removeFile = useCallback(
     (id: string) => {
-      patch((s) => ({ files: s.files.filter((f) => f.id !== id) }));
+      patch((s) => {
+        const removed = s.files.find((f) => f.id === id);
+        if (removed?.url) URL.revokeObjectURL(removed.url);
+        return { files: s.files.filter((f) => f.id !== id) };
+      });
     },
     [patch],
   );
@@ -457,11 +499,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const statusAt = useCallback((i: number) => stateRef.current.statuses[i] || 'pending', []);
 
+  // Real per-image drafting never auto-fires on navigation (only the first
+  // screen does, from finishWaiting()) -- every other screen shows a manual
+  // "Draft this with AI" button instead, matching the live site exactly.
   const goTo = useCallback(
     (i: number) => {
       const s = statusAt(i);
       patch({ idx: i });
-      if (s === 'pending') load(i);
+      if (s === 'pending' && !stateRef.current.apiStatus.gemini) load(i);
     },
     [patch, load, statusAt],
   );
@@ -471,11 +516,111 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return s.statuses.map((st, i) => ({ st, i })).filter((x) => x.st === 'approved' && x.i < s.files.length).map((x) => x.i);
   }, []);
 
+  // Real captions: typed by the user, or drafted for real by Gemini vision
+  // and then left fully editable -- either way, this is what actually
+  // ships. Ported from the live site's captionOf/setCaption/maybeDraftAI/
+  // regenerateDraft. Keyed by file index, matching statuses/idx.
+  const captionOf = useCallback((i: number): Caption => stateRef.current.captions[i] || { headline: '', body: '' }, []);
+
+  const setCaption = useCallback(
+    (i: number, field: 'headline' | 'body', value: string) => {
+      patch((s) => {
+        const current = s.captions[i] || { headline: '', body: '' };
+        const captionSource = { ...s.captionSource };
+        delete captionSource[i]; // once hand-edited, it's no longer purely an AI draft
+        return { captions: { ...s.captions, [i]: { ...current, [field]: value } }, captionSource };
+      });
+    },
+    [patch],
+  );
+
+  // Real Gemini vision call -- drafts straight into the same editable
+  // caption fields the user can type into, never a separate read-only
+  // display. Skips silently if Gemini isn't configured, already drafted, or
+  // the user already started typing (never overwrites real user text with a
+  // generated draft).
+  const maybeDraftAI = useCallback(
+    (i: number) => {
+      const s = stateRef.current;
+      if (!s.apiStatus.gemini) return;
+      if (s.captions[i]?.headline) return;
+      if (s.draftStatus[i] === 'loading' || s.draftStatus[i] === 'done') return;
+      const entry = s.files[i];
+      if (!entry?.file) return;
+
+      const token = (draftTokens.current[i] || 0) + 1;
+      draftTokens.current[i] = token;
+
+      // Same reasoning as Perceive: don't even attempt a request the
+      // platform's body-size limit will reject.
+      if (entry.file.size > MAX_AI_IMAGE_SIZE) {
+        patch((st) => ({
+          draftStatus: { ...st.draftStatus, [i]: 'error' },
+          draftError: {
+            ...st.draftError,
+            [i]: `This screen is ${formatFileSize(entry.file!.size)} — over the ${formatFileSize(MAX_AI_IMAGE_SIZE)} limit for AI drafting (uploads themselves can be up to 10 MB, this only affects the AI step).`,
+          },
+        }));
+        return;
+      }
+
+      patch((st) => {
+        const draftError = { ...st.draftError };
+        delete draftError[i];
+        return { draftStatus: { ...st.draftStatus, [i]: 'loading' }, draftError };
+      });
+
+      fileToBase64(entry.file)
+        .then((imageBase64) => draftCaption(imageBase64, entry.mimeType || 'image/png', stateRef.current.briefA, stateRef.current.briefB))
+        .then((raw) => {
+          if (draftTokens.current[i] !== token) return; // superseded by a newer call for this index
+          const parsed = parseDraftJson(raw);
+          patch((st) => ({
+            captions: { ...st.captions, [i]: parsed },
+            captionSource: { ...st.captionSource, [i]: 'ai' },
+            draftStatus: { ...st.draftStatus, [i]: 'done' },
+          }));
+        })
+        .catch((e: Error) => {
+          if (draftTokens.current[i] !== token) return;
+          patch((st) => ({
+            draftStatus: { ...st.draftStatus, [i]: 'error' },
+            draftError: { ...st.draftError, [i]: e.message || 'The Gemini request failed' },
+          }));
+        });
+    },
+    [patch],
+  );
+
+  // Explicit user action: clears whatever's there (typed or AI-drafted) and
+  // asks Gemini for a fresh pass on the current screen.
+  const regenerateDraft = useCallback(() => {
+    const i = stateRef.current.idx;
+    patch((s) => {
+      const draftStatus = { ...s.draftStatus };
+      delete draftStatus[i];
+      const captions = { ...s.captions };
+      delete captions[i];
+      const captionSource = { ...s.captionSource };
+      delete captionSource[i];
+      return { draftStatus, captions, captionSource };
+    });
+    maybeDraftAI(i);
+  }, [patch, maybeDraftAI]);
+
+  // Real per-image drafting only auto-fires for the first screen on
+  // entering Draft (matching the live site's enterDraft()) -- every other
+  // screen shows a manual "Draft this with AI" button instead of silently
+  // burning a Gemini call on every navigation.
   const finishWaiting = useCallback(() => {
     patch({ idx: 0, statuses: [] });
     navigate('/review');
-    load(0, 900);
-  }, [patch, navigate, load]);
+    if (stateRef.current.apiStatus.gemini) {
+      maybeDraftAI(0);
+    } else {
+      load(0, 900);
+    }
+  }, [patch, navigate, load, maybeDraftAI]);
 
   // Stage 1 + 2 -- Perceive then Classify, ported from the live site's
   // perceiveAllFiles()/runClassification(). Drives the real /classify
@@ -806,8 +951,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const approve = useCallback(() => {
     const s = stateRef.current;
     const status = statusAt(s.idx);
-    if (status !== 'drafted') {
-      say(status === 'approved' ? 'Already approved' : 'Nothing to approve yet');
+    if (status === 'approved') {
+      say('Already approved');
+      return;
+    }
+    // Real pipeline: approval is gated on a real headline (captionOf),
+    // matching the live site's approve() exactly -- there's no 'drafted'
+    // status machine on the real path, captions are the source of truth.
+    if (s.apiStatus.gemini) {
+      if (!(s.captions[s.idx]?.headline || '').trim()) {
+        say('Add a headline before approving');
+        return;
+      }
+    } else if (status !== 'drafted') {
+      say('Nothing to approve yet');
       return;
     }
     setStatus(s.idx, 'approved');
@@ -904,10 +1061,86 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  // Real per-section list feeding the canvas, in file order -- reordering
+  // isn't wired up yet (out of scope for this pass; matches the live
+  // site's getSectionOrder() when no reorder override is set).
+  const approvedSections = useCallback((): ApprovedSection[] => {
+    const s = stateRef.current;
+    return approvedIndices().map((i) => {
+      const file = s.files[i];
+      const cap = s.captions[i] || { headline: 'Untitled section', body: '' };
+      return {
+        id: `s${i}`,
+        file: { id: file.id, name: file.name, url: file.url },
+        headline: cap.headline || 'Untitled section',
+        body: cap.body || '',
+      };
+    });
+  }, [approvedIndices]);
+
+  const frameIdOf = useCallback((frame: PresentFrame): string => {
+    if ('content' in frame) return 'design-system';
+    if (frame.generated) return `generated-${frame.slot}`;
+    return frame.sourceSectionId;
+  }, []);
+
+  // Stage 5 -- Present's real, dynamic section list for the canvas: image
+  // sections (real captions + real screenshots), one real design-system
+  // section, and any generated placeholder sections for missing required
+  // slots. Falls through to the plain approved-sections list, untouched,
+  // when Present hasn't run (no Gemini key) -- exactly the pre-pipeline canvas.
+  const canvasSections = useCallback((): CanvasSection[] => {
+    const frames = stateRef.current.pipeline.frames;
+    if (!frames || !frames.length) {
+      return approvedSections().map((sec) => ({ ...sec, kind: 'image' as const }));
+    }
+    const bySectionId: Record<string, ApprovedSection> = {};
+    approvedSections().forEach((sec) => {
+      bySectionId[sec.id] = sec;
+    });
+
+    const sections: CanvasSection[] = [];
+    frames.forEach((frame) => {
+      const id = frameIdOf(frame);
+      if ('content' in frame) {
+        sections.push({ id, kind: 'design-system', label: frame.label, content: frame.content });
+        return;
+      }
+      if (frame.generated) {
+        sections.push({ id, kind: 'generated', label: frame.label, headline: frame.headline, body: frame.body });
+        return;
+      }
+      const real = bySectionId[frame.sourceSectionId];
+      if (!real) return; // section was un-approved since frames were last assembled -- skip gracefully
+      sections.push({ ...real, kind: 'image' });
+    });
+    return sections;
+  }, [approvedSections, frameIdOf]);
+
+  // Stage 5 -- pure, deterministic, no API call. Computed once on the
+  // Draft-to-Refine transition (see goRefine below), same moment the live
+  // site's runPresentAndValidate() runs Present. Stage 6/Validate and Stage
+  // 7/Narrate stay out of scope for this pass -- Validate is dev-only and
+  // doesn't gate Publish; Narrate wasn't part of this step.
+  const runPresent = useCallback(() => {
+    const s = stateRef.current;
+    const category = currentCategoryId();
+    const sheet = s.pipeline.designSystemSheet || buildDesignSystemSheet({});
+    const sections = approvedSections();
+    const result = assembleFrames(category, sheet, sections, MODULE_SEQUENCES);
+    patch((st) => ({ pipeline: { ...st.pipeline, frames: result.frames } }));
+  }, [patch, currentCategoryId, approvedSections]);
+
   const goRefine = useCallback(() => {
-    if (approvedIndices().length) navigate('/refine');
-    else say('Approve a section first');
-  }, [approvedIndices, navigate, say]);
+    if (!approvedIndices().length) {
+      say('Approve a section first');
+      return;
+    }
+    navigate('/refine');
+    // Only if the pipeline actually ran (Gemini configured, Stage 2 reached)
+    // -- otherwise Refine behaves exactly as it did before this pipeline existed.
+    if (stateRef.current.pipeline.classifyResult) runPresent();
+  }, [approvedIndices, navigate, say, runPresent]);
 
   const finish = useCallback(() => {
     if (!approvedIndices().length) {
@@ -1083,6 +1316,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     openVariant,
     generate,
     finishWaiting,
+    captionOf,
+    setCaption,
+    maybeDraftAI,
+    regenerateDraft,
     pickFallbackCategory,
     setFallbackOtherText,
     pickFallbackOther,
@@ -1222,6 +1459,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     editSuggestion,
     dropSuggestion,
     approvedIndices,
+    approvedSections,
+    canvasSections,
     mdSource,
   };
 

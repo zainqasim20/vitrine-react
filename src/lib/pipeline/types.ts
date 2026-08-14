@@ -87,3 +87,32 @@ export interface DesignSystemSheet {
   spacingGrid: { baseUnit: string; sampledGaps: number[] };
   components: Record<string, DesignSystemComponentEntry>;
 }
+
+// Stage 5 -- Present's input/output. See docs/ai-system-prompt.md Part 5.1.
+export interface ApprovedSection {
+  id: string;
+  file: { id: string; name: string; url?: string };
+  headline: string;
+  body: string;
+}
+
+export interface ModuleSequence {
+  required: string[];
+  recommended: string[];
+  optional: string[];
+}
+
+export interface ModuleSequencesConfig {
+  frameLabels: Record<string, string>;
+  sequences: Record<string, ModuleSequence>;
+}
+
+export type PresentFrame =
+  | { slot: 'design-system'; tier: string; label: string; generated: false; sourceSectionId: null; content: DesignSystemSheet }
+  | { slot: string; tier: string; label: string; generated: false; sourceSectionId: string; headline: string; body: string }
+  | { slot: string; tier: string; label: string; generated: true; generatedReason: string; sourceSectionId: null; headline: string; body: string };
+
+export interface PresentResult {
+  category: string | null;
+  frames: PresentFrame[];
+}

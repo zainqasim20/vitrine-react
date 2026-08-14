@@ -211,6 +211,13 @@ export interface AppActions {
   skipInterview: () => void;
   runExtractAndProceed: () => void;
 
+  setDesignSystemColorHex: (index: number, hex: string) => void;
+  setDesignSystemColorRole: (index: number, role: string) => void;
+  setDesignSystemTypographyField: (index: number, field: 'approxPx' | 'styleDescription', value: string) => void;
+  setDesignSystemComponentCount: (bucket: string, count: number) => void;
+  setDesignSystemSpacing: (value: string) => void;
+  designSystemContinue: () => void;
+
   openQuestions: () => void;
   setQAud: (v: string) => void;
   toggleQProve: (v: string) => void;
@@ -676,17 +683,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [patch]);
 
   // Stage 4 -- Extract runs right after Interview, same moment as the live
-  // site's runExtractStage(). Scope note for this step: the live site
-  // routes to its Design System edit screen next; that screen doesn't
-  // exist yet here, so this bridges straight into Draft/Review instead
-  // (same temporary-bridge pattern the Fallback step used) -- the real
-  // sheet is still computed and stored for real, ready for that screen
-  // once it's built.
+  // site's runExtractStage(), then routes to the editable Design System
+  // screen (state.route === 'design-system' on the live site) before
+  // Draft/Review -- matching renderDesignSystemScreen()/designSystemContinue().
   const runExtractAndProceed = useCallback(() => {
     const sheet = buildDesignSystemSheet(stateRef.current.pipeline.perceiveRecords);
     patch((s) => ({ pipeline: { ...s.pipeline, designSystemSheet: sheet } }));
-    finishWaiting();
-  }, [patch, finishWaiting]);
+    navigate('/design-system');
+  }, [patch, navigate]);
 
   const submitInterview = useCallback(() => {
     if (!stateRef.current.pipeline.interview.projectName.trim()) {
@@ -701,6 +705,81 @@ export function AppProvider({ children }: { children: ReactNode }) {
     patch((s) => ({ pipeline: { ...s.pipeline, interview: { ...s.pipeline.interview, skipped: true } } }));
     runExtractAndProceed();
   }, [patch, runExtractAndProceed]);
+
+  // Stage 4's editable Design System Sheet -- ported field-for-field from
+  // designsystem.js's renderDesignSystemSheet() and the live site's
+  // setDesignSystemColorRole()/setDesignSystemSpacing()/setDesignSystemField()
+  // mutations. Every color, typography row, and component count stays
+  // directly editable right up until Continue locks it into the case study.
+  const setDesignSystemColorHex = useCallback(
+    (index: number, hex: string) => {
+      patch((s) => {
+        const sheet = s.pipeline.designSystemSheet;
+        if (!sheet) return {};
+        const colors = sheet.colors.map((c, i) => (i === index ? { ...c, hex } : c));
+        return { pipeline: { ...s.pipeline, designSystemSheet: { ...sheet, colors } } };
+      });
+    },
+    [patch],
+  );
+
+  const setDesignSystemColorRole = useCallback(
+    (index: number, role: string) => {
+      patch((s) => {
+        const sheet = s.pipeline.designSystemSheet;
+        if (!sheet) return {};
+        const colors = sheet.colors.map((c, i) => (i === index ? { ...c, role } : c));
+        return { pipeline: { ...s.pipeline, designSystemSheet: { ...sheet, colors } } };
+      });
+    },
+    [patch],
+  );
+
+  const setDesignSystemTypographyField = useCallback(
+    (index: number, field: 'approxPx' | 'styleDescription', value: string) => {
+      patch((s) => {
+        const sheet = s.pipeline.designSystemSheet;
+        if (!sheet) return {};
+        const typography = sheet.typography.map((t, i) =>
+          i === index ? { ...t, [field]: field === 'approxPx' ? Number(value) || 0 : value } : t,
+        );
+        return { pipeline: { ...s.pipeline, designSystemSheet: { ...sheet, typography } } };
+      });
+    },
+    [patch],
+  );
+
+  const setDesignSystemComponentCount = useCallback(
+    (bucket: string, count: number) => {
+      patch((s) => {
+        const sheet = s.pipeline.designSystemSheet;
+        if (!sheet) return {};
+        const entry = sheet.components[bucket] || { count: 0, variants: [] };
+        return {
+          pipeline: {
+            ...s.pipeline,
+            designSystemSheet: { ...sheet, components: { ...sheet.components, [bucket]: { ...entry, count: Math.max(0, count) } } },
+          },
+        };
+      });
+    },
+    [patch],
+  );
+
+  const setDesignSystemSpacing = useCallback(
+    (value: string) => {
+      patch((s) => {
+        const sheet = s.pipeline.designSystemSheet;
+        if (!sheet) return {};
+        return { pipeline: { ...s.pipeline, designSystemSheet: { ...sheet, spacingGrid: { ...sheet.spacingGrid, baseUnit: value } } } };
+      });
+    },
+    [patch],
+  );
+
+  const designSystemContinue = useCallback(() => {
+    finishWaiting();
+  }, [finishWaiting]);
 
   const openQuestions = useCallback(() => navigate('/questions'), [navigate]);
 
@@ -1018,6 +1097,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     submitInterview,
     skipInterview,
     runExtractAndProceed,
+    setDesignSystemColorHex,
+    setDesignSystemColorRole,
+    setDesignSystemTypographyField,
+    setDesignSystemComponentCount,
+    setDesignSystemSpacing,
+    designSystemContinue,
     openQuestions,
     setQAud: (v) => patch({ qAud: v }),
     toggleQProve,

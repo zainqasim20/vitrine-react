@@ -6,6 +6,7 @@ import { Landing } from './pages/Landing';
 import { Create } from './pages/Create';
 import { Waiting } from './pages/Waiting';
 import { Classify } from './pages/Classify';
+import { DesignSystem } from './pages/DesignSystem';
 import { Questions } from './pages/Questions';
 import { Review } from './pages/Review';
 import { Refine } from './pages/Refine';
@@ -21,6 +22,7 @@ export default function App() {
           <Route path="/create" element={<Create />} />
           <Route path="/waiting" element={<Waiting />} />
           <Route path="/classify" element={<Classify />} />
+          <Route path="/design-system" element={<DesignSystem />} />
           <Route path="/questions" element={<Questions />} />
           <Route path="/review" element={<Review />} />
           <Route path="/refine" element={<Refine />} />

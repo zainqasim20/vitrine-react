@@ -87,6 +87,13 @@ export function FlowHeader() {
           </span>
         )}
 
+        {(path === '/classify' || path === '/design-system') && (
+          <button type="button" onClick={() => navigate('/create')} style={{ ...navLinkStyle, padding: '0 8px', color: 'var(--text-3)' }}>
+            <i className="ph ph-arrow-left" style={{ fontSize: 14 }} />
+            Screens
+          </button>
+        )}
+
         {path === '/review' && (
           <button type="button" onClick={() => navigate('/create')} style={{ ...navLinkStyle, padding: '0 8px', color: 'var(--text-3)' }}>
             <i className="ph ph-arrow-left" style={{ fontSize: 14 }} />

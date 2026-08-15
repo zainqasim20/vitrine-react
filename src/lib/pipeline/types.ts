@@ -116,3 +116,19 @@ export interface PresentResult {
   category: string | null;
   frames: PresentFrame[];
 }
+
+// Stage 7 -- Narrate's output. See docs/ai-system-prompt.md Part 7.
+export interface Narration {
+  problemStatement: string;
+  outcomeFraming: string;
+}
+
+export interface NarrateInput {
+  categoryLabel: string;
+  projectName: string;
+  clientStatus: string;
+  ndaFlag: boolean;
+  outcome: string;
+  tools: string[];
+  designSystemSheet: DesignSystemSheet;
+}

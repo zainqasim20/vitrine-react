@@ -7,9 +7,10 @@ import { perceiveImage } from './pipeline/perceive';
 import { buildDesignSystemSheet } from './pipeline/extract';
 import { assembleFrames } from './pipeline/present';
 import { draftCaption } from './pipeline/draft';
+import { narrateCaseStudy } from './pipeline/narrate';
 import categorySignals from './pipeline/config/category-signals.json';
 import moduleSequences from './pipeline/config/module-sequences.json';
-import type { ApprovedSection, CategorySignalsConfig, ModuleSequencesConfig, PresentFrame } from './pipeline/types';
+import type { ApprovedSection, CategorySignalsConfig, DesignSystemSheet, ModuleSequencesConfig, PresentFrame } from './pipeline/types';
 import type { Caption, CanvasSection, ClientStatus, ProjectRecord, ProjectSnapshot } from './types';
 
 const PIPELINE_CONFIG = categorySignals as unknown as CategorySignalsConfig;
@@ -59,6 +60,24 @@ function parseDraftJson(raw: string): Caption {
   const body = String(obj.body || '').trim();
   if (!headline || !body) throw new Error('The model returned an incomplete response');
   return { headline, body };
+}
+
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+}
+
+// Ported unchanged from the live site's designSystemSheetToMarkdown, used by
+// mdSource() to render the canvas's Design System frame into export.
+function designSystemSheetToMarkdown(sheet: DesignSystemSheet): string {
+  const lines: string[] = [];
+  if (sheet.colors.length) lines.push(`**Colors:** ${sheet.colors.map((c) => `${c.hex} (${c.role})`).join(', ')}`, '');
+  if (sheet.typography.length)
+    lines.push(`**Typography:** ${sheet.typography.map((t) => `${t.role} ~${t.approxPx}px${t.styleDescription ? ` — ${t.styleDescription}` : ''}`).join('; ')}`, '');
+  const comps = Object.entries(sheet.components)
+    .filter(([, v]) => v.count > 0)
+    .map(([k, v]) => `${k} (${v.count})`);
+  if (comps.length) lines.push(`**Components:** ${comps.join(', ')}`, '');
+  return lines.join('\n');
 }
 
 // Ported from the live site's seedInterviewDefaults: pre-fills the
@@ -221,6 +240,9 @@ const initialState: AppState = {
     },
     designSystemSheet: null,
     frames: null,
+    narration: null,
+    narrationStatus: null,
+    narrationError: null,
   },
 
   projects: [],
@@ -1193,9 +1215,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Stage 5 -- pure, deterministic, no API call. Computed once on the
   // Draft-to-Refine transition (see goRefine below), same moment the live
-  // site's runPresentAndValidate() runs Present. Stage 6/Validate and Stage
-  // 7/Narrate stay out of scope for this pass -- Validate is dev-only and
-  // doesn't gate Publish; Narrate wasn't part of this step.
+  // site's runPresentAndValidate() runs Present. Stage 6/Validate stays out
+  // of scope for this pass -- it's dev-only and doesn't gate Publish.
   const runPresent = useCallback(() => {
     const s = stateRef.current;
     const category = currentCategoryId();
@@ -1204,6 +1225,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const result = assembleFrames(category, sheet, sections, MODULE_SEQUENCES);
     patch((st) => ({ pipeline: { ...st.pipeline, frames: result.frames } }));
   }, [patch, currentCategoryId, approvedSections]);
+
+  // Stage 7 -- the pipeline's second and last Gemini call (Perceive was the
+  // first), text-only. Fires once per project, cached; retried/backed-off
+  // inside narrate.ts; never blocks entering or using Refine. A hoisted
+  // function declaration (not useCallback) so it can call autosaveProject
+  // (also hoisted, defined below) without a dependency-array ordering issue.
+  function maybeNarrate() {
+    const s = stateRef.current;
+    if (!s.apiStatus.gemini) return;
+    if (s.pipeline.narrationStatus === 'loading' || s.pipeline.narrationStatus === 'done') return;
+    patch((st) => ({ pipeline: { ...st.pipeline, narrationStatus: 'loading', narrationError: null } }));
+
+    const sheet = s.pipeline.designSystemSheet || buildDesignSystemSheet({});
+    narrateCaseStudy({
+      categoryLabel: currentCategoryLabel(),
+      projectName: s.pipeline.interview.projectName,
+      clientStatus: s.pipeline.interview.clientStatus,
+      ndaFlag: s.pipeline.interview.clientStatus === 'Client — confidential (NDA)',
+      outcome: s.pipeline.interview.outcome,
+      tools: s.pipeline.interview.tools,
+      designSystemSheet: sheet,
+    })
+      .then((narration) => {
+        patch((st) => ({ pipeline: { ...st.pipeline, narration, narrationStatus: 'done' } }));
+        autosaveProject();
+      })
+      .catch((e: Error) => {
+        patch((st) => ({ pipeline: { ...st.pipeline, narrationStatus: 'error', narrationError: e.message || 'The Gemini request failed' } }));
+      });
+  }
 
   // ==================================================================
   // Real project persistence (localStorage) -- ported from the live site's
@@ -1455,7 +1506,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     navigate('/refine');
     // Only if the pipeline actually ran (Gemini configured, Stage 2 reached)
     // -- otherwise Refine behaves exactly as it did before this pipeline existed.
-    if (stateRef.current.pipeline.classifyResult) runPresent();
+    if (stateRef.current.pipeline.classifyResult) {
+      runPresent();
+      maybeNarrate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- maybeNarrate is a hoisted function declaration, not a dep
   }, [approvedIndices, navigate, say, runPresent]);
 
   // Real, public case-study preview -- ported from the live site's
@@ -1510,12 +1565,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [patch],
   );
 
+  // Real export: when the AI pipeline reached Stage 5/Present, walks
+  // canvasSections() -- the same real, ordered, edited list the canvas
+  // itself renders from -- with narration (Stage 7) as an unheaded intro
+  // right after the title, exactly matching the live site's buildMarkdown().
+  // Falls back to the pre-pipeline DRAFTS mock, untouched, when the pipeline
+  // never ran (no Gemini key).
   const mdSource = useCallback(() => {
     const s = stateRef.current;
+    const lines: string[] = [`# ${s.title || 'Untitled case study'}`, ''];
+
+    const narration = s.pipeline.narration;
+    if (narration && (narration.problemStatement || narration.outcomeFraming)) {
+      if (narration.problemStatement) lines.push(narration.problemStatement, '');
+      if (narration.outcomeFraming) lines.push(narration.outcomeFraming, '');
+    }
+
+    if (s.pipeline.frames && s.pipeline.frames.length) {
+      const sections = canvasSections();
+      if (!sections.length) lines.push('_No sections approved yet._', '');
+      sections.forEach((sec) => {
+        if (sec.kind === 'design-system') {
+          lines.push(`## ${sec.label || 'Design System'}`, '');
+          lines.push(designSystemSheetToMarkdown(sec.content), '');
+          return;
+        }
+        if (sec.kind === 'generated') {
+          lines.push(`## ${sec.headline || sec.label}`, '');
+          if (sec.body) lines.push(sec.body, '');
+          lines.push(`_AI-generated placeholder — ${sec.label} had no matching uploaded screen._`, '');
+          return;
+        }
+        lines.push(`## ${sec.headline}`, '');
+        lines.push(`![${sec.file.name}](${sec.file.name})`, '');
+        lines.push(sec.body, '');
+      });
+      return lines.join('\n');
+    }
+
     const rows = approvedIndices().map((i) => DRAFTS[i % DRAFTS.length]);
     const body = rows.map((d) => `## ${d.headline}\n\n${d.body}\n`).join('\n');
-    return `# ${s.title}\n\n${body || '_No sections approved yet._\n'}`;
-  }, [approvedIndices]);
+    return `${lines.join('\n')}\n${body || '_No sections approved yet._\n'}`;
+  }, [approvedIndices, canvasSections]);
 
   const saveAs = useCallback(
     (name: string, text: string, type: string) => {
@@ -1543,11 +1634,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
   const downloadHtml = useCallback(() => {
     const s = stateRef.current;
-    const rows = approvedIndices().map((i) => DRAFTS[i % DRAFTS.length]);
-    const body = rows.map((d) => `<h2>${d.headline}</h2><p>${d.body}</p>`).join('');
-    const html = `<!doctype html><meta charset="utf-8"><title>${s.title}</title><body style="font: 16px/1.6 system-ui; max-width: 42em; margin: 4rem auto; padding: 0 1rem"><h1>${s.title}</h1>${body}</body>`;
+    const title = s.title || 'Untitled case study';
+    let body = '';
+    if (s.pipeline.frames && s.pipeline.frames.length) {
+      const narration = s.pipeline.narration;
+      if (narration?.problemStatement) body += `<p>${escapeHtml(narration.problemStatement)}</p>`;
+      if (narration?.outcomeFraming) body += `<p>${escapeHtml(narration.outcomeFraming)}</p>`;
+      body += canvasSections()
+        .map((sec) => {
+          if (sec.kind === 'design-system') return `<h2>${escapeHtml(sec.label || 'Design System')}</h2><p>${escapeHtml(designSystemSheetToMarkdown(sec.content)).replace(/\n/g, '<br>')}</p>`;
+          if (sec.kind === 'generated') return `<h2>${escapeHtml(sec.headline || sec.label)}</h2><p>${escapeHtml(sec.body)}</p>`;
+          return `<h2>${escapeHtml(sec.headline)}</h2><p>${escapeHtml(sec.body)}</p>`;
+        })
+        .join('');
+    } else {
+      const rows = approvedIndices().map((i) => DRAFTS[i % DRAFTS.length]);
+      body = rows.map((d) => `<h2>${d.headline}</h2><p>${d.body}</p>`).join('');
+    }
+    const html = `<!doctype html><meta charset="utf-8"><title>${escapeHtml(title)}</title><body style="font: 16px/1.6 system-ui; max-width: 42em; margin: 4rem auto; padding: 0 1rem"><h1>${escapeHtml(title)}</h1>${body}</body>`;
     saveAs('case-study.html', html, 'text/html');
-  }, [saveAs, approvedIndices]);
+  }, [saveAs, approvedIndices, canvasSections]);
 
   const copyMd = useCallback(() => {
     patch({ copied: true });

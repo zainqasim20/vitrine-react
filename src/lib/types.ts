@@ -1,4 +1,4 @@
-import type { ApprovedSection, ClassifyResult, DesignSystemSheet, ImageFeatureRecord, PerceiveStatus, PresentFrame } from './pipeline/types';
+import type { ApprovedSection, ClassifyResult, DesignSystemSheet, ImageFeatureRecord, Narration, PerceiveStatus, PresentFrame } from './pipeline/types';
 
 // The canvas's real, dynamic section list -- a superset of ApprovedSection
 // that also carries the real Design System sheet and any Present-generated
@@ -210,6 +210,14 @@ export interface AppState {
     // null until then; the canvas falls back to the pre-pipeline static
     // section list exactly as it did before this stage existed.
     frames: PresentFrame[] | null;
+
+    // Stage 7 -- Narrate's output, computed asynchronously and in parallel
+    // with Present on the Draft-to-Refine transition -- never blocks
+    // entering or using Refine. null until it resolves; the canvas/Preview
+    // intro block and Markdown export both simply omit it until then.
+    narration: Narration | null;
+    narrationStatus: 'loading' | 'done' | 'error' | null;
+    narrationError: string | null;
   };
 
   // Real, localStorage-backed project persistence (My Projects/Trash) --

@@ -4,6 +4,7 @@ import { useApp, type AppActions } from '../lib/store';
 import { DRAFTS, JOURNEY, MOTION_PRESETS, MOTION_TRIGGERS, PALETTE, PATTERNS } from '../lib/data';
 import type { AppState, CanvasSection } from '../lib/types';
 import type { DesignSystemSheet } from '../lib/pipeline/types';
+import { NarrationIntro } from '../components/NarrationIntro';
 
 const SPEED_SCALE: Record<string, number> = { '0.5x': 2, '1x': 1, '1.5x': 0.7, '2x': 0.5 };
 const EASE_CSS: Record<string, string> = { Linear: 'linear', Ease: 'ease-in-out', Bounce: 'cubic-bezier(.34,1.56,.64,1)' };
@@ -150,6 +151,10 @@ export function Refine() {
             )}
           </div>
         </div>
+
+        {usingRealSections && state.pipeline.narration && (
+          <NarrationIntro problemStatement={state.pipeline.narration.problemStatement} outcomeFraming={state.pipeline.narration.outcomeFraming} />
+        )}
 
         <SectionRule label="Design system" />
         {usingRealSections && state.pipeline.designSystemSheet ? (

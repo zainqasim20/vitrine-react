@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../lib/store';
 import type { CanvasSection } from '../lib/types';
+import { NarrationIntro } from '../components/NarrationIntro';
 
 // Real, public case-study preview -- ported from the live site's
 // renderPreview()/renderPreviewSection() family. Reads the same
@@ -135,6 +136,15 @@ export function Preview() {
             <span style={{ fontSize: 13, fontWeight: 700 }}>Northwind</span>
           </div>
         </div>
+
+        {state.pipeline.narration && (
+          <NarrationIntro
+            problemStatement={state.pipeline.narration.problemStatement}
+            outcomeFraming={state.pipeline.narration.outcomeFraming}
+            bodyFont={theme.bodyFont}
+            marginBottom={56}
+          />
+        )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 64 }}>
           {sections.map((sec) => (

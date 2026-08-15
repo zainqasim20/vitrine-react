@@ -58,11 +58,11 @@ export function SettingsPage() {
             <h2 style={{ margin: 0, fontFamily: "'Bricolage Grotesque', sans-serif", fontWeight: 600, fontSize: 18 }}>Profile</h2>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <span style={fieldLabel}>Name</span>
-              <input type="text" readOnly defaultValue="Zain Qasim" style={readonlyInput} />
+              <input type="text" readOnly defaultValue="Your Name" style={readonlyInput} />
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <span style={fieldLabel}>Email</span>
-              <input type="email" readOnly defaultValue="zain6400qasim@gmail.com" style={readonlyInput} />
+              <input type="email" readOnly defaultValue="you@example.com" style={readonlyInput} />
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <span style={fieldLabel}>Workspace name</span>

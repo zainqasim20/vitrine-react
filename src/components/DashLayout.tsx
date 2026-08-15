@@ -198,7 +198,7 @@ export function DashLayout() {
                 cursor: 'pointer',
               }}
             >
-              ZQ
+              YN
             </button>
           </div>
         </div>

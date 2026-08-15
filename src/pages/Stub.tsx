@@ -3,7 +3,6 @@ import { Logo } from '../components/Logo';
 import { ThemeSwitch } from '../components/ThemeSwitch';
 
 const TITLES: Record<string, { title: string; body: string; icon: string }> = {
-  '/templates': { title: 'Templates', body: 'The full filterable template gallery lands in a follow-up pass. Presentation styles are already selectable from Create.', icon: 'ph ph-layout' },
   '/showcase': { title: 'Showcase', body: 'The public gallery of published case studies lands in a follow-up pass.', icon: 'ph ph-compass' },
 };
 

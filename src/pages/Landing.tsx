@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Logo } from '../components/Logo';
 import { ThemeSwitch } from '../components/ThemeSwitch';
+import { TemplateThumb } from '../components/TemplateThumb';
 import { HOW_STEPS, TEMPLATE_TEASERS } from '../lib/data';
 
 const WORDS = ['portfolio', 'case study', 'showcase page'];
@@ -251,7 +252,7 @@ export function Landing() {
               {TEMPLATE_TEASERS.map((t) => (
                 <div key={t.name} style={{ border: '1px solid var(--border)', borderRadius: 16, background: 'var(--surface)', overflow: 'hidden' }}>
                   <div style={{ aspectRatio: '4 / 3', background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: 20 }}>
-                    <TemplateTeaserMock name={t.name} />
+                    <TemplateThumb kind={t.kind} />
                   </div>
                   <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 4 }}>
                     <span style={{ fontSize: 15, fontWeight: 700 }}>{t.name}</span>
@@ -342,52 +343,3 @@ function LandingFrameMock({ stepKey }: { stepKey: (typeof LANDING_FRAMES)[number
   );
 }
 
-// Real per-style mock visuals, ported from the live site's templateThumbMock() --
-// distinct from each other so a visitor can actually read what each style means,
-// rather than four copies of the same generic tile grid.
-function TemplateTeaserMock({ name }: { name: string }) {
-  if (name === 'Minimalist Grid') {
-    return (
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gridAutoRows: '1fr', gap: 8, height: '100%' }}>
-        {Array.from({ length: 6 }).map((_, i) => (
-          <span key={i} style={{ borderRadius: 3, background: i === 4 ? '#14141A' : 'var(--surface-3)' }} />
-        ))}
-      </div>
-    );
-  }
-  if (name === 'Story Scroll') {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, height: '100%', justifyContent: 'center' }}>
-        <span style={{ height: 8, width: '58%', borderRadius: 2, background: '#14141A' }} />
-        <span style={{ height: 34, borderRadius: 4, background: 'var(--surface-3)' }} />
-        <span style={{ height: 6, borderRadius: 2, background: 'var(--border)' }} />
-        <span style={{ height: 6, width: '72%', borderRadius: 2, background: 'var(--border)' }} />
-        <span style={{ height: 20, width: '40%', borderRadius: 4, background: 'var(--surface-3)' }} />
-      </div>
-    );
-  }
-  if (name === 'Metrics-First') {
-    return (
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, height: '100%', alignItems: 'end' }}>
-        {[0.9, 0.55, 0.75, 0.4].map((h, i) => (
-          <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6, height: '100%', justifyContent: 'flex-end' }}>
-            <span style={{ height: `${h * 100}%`, borderRadius: 3, background: '#14141A' }} />
-            <span style={{ height: 5, borderRadius: 2, background: 'var(--border)' }} />
-          </div>
-        ))}
-      </div>
-    );
-  }
-  // Editorial Magazine
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 12, height: '100%' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, justifyContent: 'center' }}>
-        <span style={{ height: 9, width: '90%', borderRadius: 2, background: '#14141A' }} />
-        <span style={{ height: 9, width: '60%', borderRadius: 2, background: '#14141A' }} />
-        <span style={{ height: 5, width: '100%', borderRadius: 2, background: 'var(--border)', marginTop: 6 }} />
-        <span style={{ height: 5, width: '80%', borderRadius: 2, background: 'var(--border)' }} />
-      </div>
-      <span style={{ borderRadius: 4, background: 'var(--surface-3)' }} />
-    </div>
-  );
-}

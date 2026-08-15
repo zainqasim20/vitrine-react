@@ -219,4 +219,5 @@ export interface AppState {
   lastSavedAt: number | null;
   npOpen: boolean;
   settingsTab: 'Profile' | 'Plan';
+  templateFilter: string;
 }

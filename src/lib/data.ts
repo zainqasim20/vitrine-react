@@ -37,10 +37,34 @@ export const PRESENTATION_STYLES = ['Minimalist Grid', 'Story Scroll', 'Editoria
 export type PresentationStyle = (typeof PRESENTATION_STYLES)[number];
 
 export const TEMPLATE_TEASERS = [
-  { name: 'Minimalist Grid', meta: 'Even weight, no hierarchy' },
-  { name: 'Story Scroll', meta: 'One long narrative column' },
-  { name: 'Metrics-First', meta: 'Numbers lead, prose follows' },
-  { name: 'Editorial Magazine', meta: 'Type-led, wide margins' },
+  { name: 'Minimalist Grid', meta: 'Even weight, no hierarchy', kind: 'grid' as const },
+  { name: 'Story Scroll', meta: 'One long narrative column', kind: 'story' as const },
+  { name: 'Metrics-First', meta: 'Numbers lead, prose follows', kind: 'metrics' as const },
+  { name: 'Editorial Magazine', meta: 'Type-led, wide margins', kind: 'editorial' as const },
+];
+
+// Real Templates gallery data, ported from the live site's TEMPLATES/TEMPLATE_CATEGORIES.
+// theme/layout are applied to Preview for real when a template is used (useTemplate()).
+export interface TemplateDef {
+  name: string;
+  desc: string;
+  kind: 'grid' | 'story' | 'split' | 'metrics' | 'editorial' | 'timeline' | 'visual' | 'deepdive';
+  cat: 'Minimal' | 'Narrative' | 'Data' | 'Editorial';
+  theme: 'minimal' | 'editorial' | 'bold' | 'playful';
+  layout: 'stacked' | 'side-by-side' | 'compact';
+}
+
+export const TEMPLATE_CATEGORIES = ['All', 'Minimal', 'Narrative', 'Data', 'Editorial'] as const;
+
+export const TEMPLATES: TemplateDef[] = [
+  { name: 'Minimalist Grid', desc: 'Even weight, no hierarchy', kind: 'grid', cat: 'Minimal', theme: 'minimal', layout: 'stacked' },
+  { name: 'Story Scroll', desc: 'One long narrative column', kind: 'story', cat: 'Narrative', theme: 'minimal', layout: 'stacked' },
+  { name: 'Before/After Split', desc: 'Two states, one comparison', kind: 'split', cat: 'Data', theme: 'bold', layout: 'side-by-side' },
+  { name: 'Metrics-First', desc: 'Numbers lead, prose follows', kind: 'metrics', cat: 'Data', theme: 'bold', layout: 'compact' },
+  { name: 'Editorial Magazine', desc: 'Type-led, wide margins', kind: 'editorial', cat: 'Editorial', theme: 'editorial', layout: 'side-by-side' },
+  { name: 'Process Timeline', desc: 'Left-rail steps, chronological', kind: 'timeline', cat: 'Narrative', theme: 'minimal', layout: 'compact' },
+  { name: 'Visual-First', desc: 'Full-bleed screens, light copy', kind: 'visual', cat: 'Minimal', theme: 'playful', layout: 'stacked' },
+  { name: 'Single Screen Deep-Dive', desc: 'One screen, annotated closely', kind: 'deepdive', cat: 'Editorial', theme: 'editorial', layout: 'stacked' },
 ];
 
 export const HOW_STEPS = [

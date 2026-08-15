@@ -17,6 +17,7 @@ import { Projects } from './pages/Projects';
 import { TrashPage } from './pages/TrashPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { DashStub } from './pages/DashStub';
+import { Templates } from './pages/Templates';
 import { Stub } from './pages/Stub';
 
 export default function App() {
@@ -37,13 +38,13 @@ export default function App() {
         </Route>
         <Route element={<DashLayout />}>
           <Route path="/projects" element={<Projects />} />
+          <Route path="/templates" element={<Templates />} />
           <Route path="/brand" element={<DashStub />} />
           <Route path="/usage" element={<SettingsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/trash" element={<TrashPage />} />
           <Route path="/help" element={<DashStub />} />
         </Route>
-        <Route path="/templates" element={<Stub />} />
         <Route path="/showcase" element={<Stub />} />
         <Route path="*" element={<Landing />} />
       </Routes>

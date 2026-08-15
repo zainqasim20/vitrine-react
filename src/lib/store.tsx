@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AppState, ScreenStatus, ThemeMode } from './types';
-import { DRAFTS } from './data';
+import { DRAFTS, TEMPLATES } from './data';
 import { classifyRecords } from './pipeline/classify';
 import { perceiveImage } from './pipeline/perceive';
 import { buildDesignSystemSheet } from './pipeline/extract';
@@ -228,6 +228,7 @@ const initialState: AppState = {
   lastSavedAt: null,
   npOpen: false,
   settingsTab: 'Profile',
+  templateFilter: 'All',
 };
 
 function readStoredTheme(): ThemeMode {
@@ -423,6 +424,8 @@ export interface AppActions {
   goUsage: () => void;
   setSettingsTab: (v: 'Profile' | 'Plan') => void;
   logout: () => void;
+  setTemplateFilter: (v: string) => void;
+  useTemplate: (name: string) => void;
 }
 
 interface Ctx {
@@ -528,6 +531,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
       if (incoming.length) setTimeout(() => autosaveProject(), 0);
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- autosaveProject is a hoisted function declaration, not a dep
     [patch],
   );
 
@@ -1040,6 +1044,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const nextIdx = (s.idx + 1) % Math.max(1, s.files.length);
     clearTimeout(loadTimer.current);
     loadTimer.current = setTimeout(() => goTo(nextIdx), 650);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- autosaveProject is a hoisted function declaration, not a dep
   }, [statusAt, say, setStatus, goTo]);
 
   const regenerate = useCallback(() => {
@@ -1428,6 +1433,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     navigate('/');
   }, [say, navigate]);
 
+  const setTemplateFilter = useCallback((v: string) => patch({ templateFilter: v }), [patch]);
+
+  // Real effect, not a toast: the chosen template's theme + layout are applied
+  // to Preview right away, matching the live site's useTemplate().
+  const useTemplate = useCallback(
+    (name: string) => {
+      const tpl = TEMPLATES.find((t) => t.name === name);
+      if (tpl) patch({ previewTheme: tpl.theme, previewLayout: tpl.layout });
+      say(`"${name}" applied — add your screens to see it`);
+      navigate('/create');
+    },
+    [patch, say, navigate],
+  );
+
   const goRefine = useCallback(() => {
     if (!approvedIndices().length) {
       say('Approve a section first');
@@ -1454,6 +1473,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       patch({ previewLayout: v });
       setTimeout(() => autosaveProject(), 0);
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- autosaveProject is a hoisted function declaration, not a dep
     [patch],
   );
   const setPreviewTheme = useCallback(
@@ -1461,6 +1481,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       patch({ previewTheme: v });
       setTimeout(() => autosaveProject(), 0);
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- autosaveProject is a hoisted function declaration, not a dep
     [patch],
   );
 
@@ -1471,6 +1492,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     autosaveProject({ publish: true });
     navigate('/published');
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- autosaveProject is a hoisted function declaration, not a dep
   }, [approvedIndices, say, navigate]);
 
   const publish = finish;
@@ -1805,6 +1827,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     goUsage,
     setSettingsTab,
     logout,
+    setTemplateFilter,
+    useTemplate,
   };
 
   return <AppContext.Provider value={{ state, actions }}>{children}</AppContext.Provider>;

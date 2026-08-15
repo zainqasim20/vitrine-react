@@ -85,13 +85,10 @@ export function Landing() {
         <Logo height={28} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
           <nav style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-            <Link to="/showcase" style={{ color: 'var(--text-2)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 500, fontSize: 15, textDecoration: 'none' }}>
-              Showcase
-            </Link>
             <Link to="/templates" style={{ color: 'var(--text-2)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 500, fontSize: 15, textDecoration: 'none' }}>
               Templates
             </Link>
-            <Link to="/settings" style={{ color: 'var(--text-2)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 500, fontSize: 15, textDecoration: 'none' }}>
+            <Link to="/projects" style={{ color: 'var(--text-2)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 500, fontSize: 15, textDecoration: 'none' }}>
               Log in
             </Link>
           </nav>

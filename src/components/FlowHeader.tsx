@@ -155,10 +155,6 @@ export function FlowHeader() {
           <i className="ph ph-layout" style={{ fontSize: 18 }} />
           Templates
         </Link>
-        <Link to="/showcase" title="Showcase" style={navLinkStyle}>
-          <i className="ph ph-compass" style={{ fontSize: 18 }} />
-          Showcase
-        </Link>
         <ThemeSwitch size={26} />
         <Link
           to="/settings"

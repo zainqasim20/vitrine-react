@@ -162,7 +162,7 @@ export function FlowHeader() {
         <ThemeSwitch size={26} />
         <Link
           to="/settings"
-          title="Maya Reyes — profile & settings"
+          title="Zain Qasim — profile & settings"
           style={{
             width: 34,
             height: 34,
@@ -180,7 +180,7 @@ export function FlowHeader() {
             textDecoration: 'none',
           }}
         >
-          MR
+          ZQ
         </Link>
       </div>
     </header>

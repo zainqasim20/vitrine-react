@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router-dom';
 import { AppProvider } from './lib/store';
 import { FlowLayout } from './FlowLayout';
+import { DashLayout } from './components/DashLayout';
 import { Toast } from './components/Toast';
 import { Landing } from './pages/Landing';
 import { Create } from './pages/Create';
@@ -12,6 +13,10 @@ import { Review } from './pages/Review';
 import { Refine } from './pages/Refine';
 import { Preview } from './pages/Preview';
 import { Published } from './pages/Published';
+import { Projects } from './pages/Projects';
+import { TrashPage } from './pages/TrashPage';
+import { SettingsPage } from './pages/SettingsPage';
+import { DashStub } from './pages/DashStub';
 import { Stub } from './pages/Stub';
 
 export default function App() {
@@ -30,10 +35,16 @@ export default function App() {
           <Route path="/refine" element={<Refine />} />
           <Route path="/published" element={<Published />} />
         </Route>
-        <Route path="/projects" element={<Stub />} />
+        <Route element={<DashLayout />}>
+          <Route path="/projects" element={<Projects />} />
+          <Route path="/brand" element={<DashStub />} />
+          <Route path="/usage" element={<SettingsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/trash" element={<TrashPage />} />
+          <Route path="/help" element={<DashStub />} />
+        </Route>
         <Route path="/templates" element={<Stub />} />
         <Route path="/showcase" element={<Stub />} />
-        <Route path="/settings" element={<Stub />} />
         <Route path="*" element={<Landing />} />
       </Routes>
       <Toast />

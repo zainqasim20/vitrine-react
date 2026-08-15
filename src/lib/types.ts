@@ -27,6 +27,35 @@ export interface Caption {
   body: string;
 }
 
+export type ProjectStatus = 'Draft' | 'Published';
+
+// Text/settings that survive a reload -- what openProject() can restore for
+// an older project when its in-memory files/blob URLs are gone. Deliberately
+// keyed on previewTheme/previewLayout (this port's own real Preview fields),
+// not the live site's overloaded state.theme.
+export interface ProjectSnapshot {
+  title: string;
+  previewTheme: AppState['previewTheme'];
+  previewLayout: AppState['previewLayout'];
+  briefA: string;
+  briefB: string;
+}
+
+// Real, localStorage-backed project record -- ported from the live site's
+// PROJECTS_KEY model. cover is a real canvas-downsampled JPEG data URL of
+// the first approved screenshot, never a stock/placeholder image.
+export interface ProjectRecord {
+  id: string;
+  title: string;
+  status: ProjectStatus;
+  createdAt: number;
+  editedAt: number;
+  deletedAt: number | null;
+  sectionCount: number;
+  cover: string | null;
+  snapshot: ProjectSnapshot;
+}
+
 export interface SectionSize {
   w: number;
   h: number;
@@ -182,4 +211,12 @@ export interface AppState {
     // section list exactly as it did before this stage existed.
     frames: PresentFrame[] | null;
   };
+
+  // Real, localStorage-backed project persistence (My Projects/Trash) --
+  // ported from the live site's state.projects/currentProjectId/lastSavedAt.
+  projects: ProjectRecord[];
+  currentProjectId: string | null;
+  lastSavedAt: number | null;
+  npOpen: boolean;
+  settingsTab: 'Profile' | 'Plan';
 }

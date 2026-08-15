@@ -3,10 +3,8 @@ import { Logo } from '../components/Logo';
 import { ThemeSwitch } from '../components/ThemeSwitch';
 
 const TITLES: Record<string, { title: string; body: string; icon: string }> = {
-  '/projects': { title: 'My Projects', body: 'Your dashboard of case studies — covers, status, and last-edited times — lands in a follow-up pass.', icon: 'ph ph-squares-four' },
   '/templates': { title: 'Templates', body: 'The full filterable template gallery lands in a follow-up pass. Presentation styles are already selectable from Create.', icon: 'ph ph-layout' },
   '/showcase': { title: 'Showcase', body: 'The public gallery of published case studies lands in a follow-up pass.', icon: 'ph ph-compass' },
-  '/settings': { title: 'Settings', body: 'Profile, plan, and account settings land in a follow-up pass.', icon: 'ph ph-gear' },
 };
 
 export function Stub() {

@@ -10,7 +10,7 @@ import { draftCaption } from './pipeline/draft';
 import categorySignals from './pipeline/config/category-signals.json';
 import moduleSequences from './pipeline/config/module-sequences.json';
 import type { ApprovedSection, CategorySignalsConfig, ModuleSequencesConfig, PresentFrame } from './pipeline/types';
-import type { Caption, CanvasSection, ClientStatus } from './types';
+import type { Caption, CanvasSection, ClientStatus, ProjectRecord, ProjectSnapshot } from './types';
 
 const PIPELINE_CONFIG = categorySignals as unknown as CategorySignalsConfig;
 const MODULE_SEQUENCES = moduleSequences as unknown as ModuleSequencesConfig;
@@ -68,6 +68,40 @@ function parseDraftJson(raw: string): Caption {
 function seedToolsForCategory(categoryId: string | null): string[] {
   if (!categoryId) return [];
   return PIPELINE_CONFIG.defaultTools[categoryId]?.slice() || [];
+}
+
+// Real client-side project persistence (localStorage) -- no server exists,
+// so this is the honest ceiling: metadata + real generated cover thumbnails
+// + all text/settings survive reloads; raw screenshot files cannot (blobs
+// can't be serialized here), so reopening an older project asks for its
+// screens back instead of pretending they're still there.
+const PROJECTS_KEY = 'vitrine.projects.v1';
+
+function loadStoredProjects(): ProjectRecord[] {
+  try {
+    const raw = localStorage.getItem(PROJECTS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function genProjectId() {
+  return 'p-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+}
+
+export function relativeTime(ts: number | null): string {
+  if (!ts) return '';
+  const diffMs = Date.now() - ts;
+  const min = Math.round(diffMs / 60000);
+  if (min < 1) return 'just now';
+  if (min < 60) return `${min} min${min === 1 ? '' : 's'} ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr} hour${hr === 1 ? '' : 's'} ago`;
+  const day = Math.round(hr / 24);
+  if (day < 30) return `${day} day${day === 1 ? '' : 's'} ago`;
+  return new Date(ts).toLocaleDateString();
 }
 
 const NAMES = [
@@ -188,6 +222,12 @@ const initialState: AppState = {
     designSystemSheet: null,
     frames: null,
   },
+
+  projects: [],
+  currentProjectId: null,
+  lastSavedAt: null,
+  npOpen: false,
+  settingsTab: 'Profile',
 };
 
 function readStoredTheme(): ThemeMode {
@@ -366,6 +406,23 @@ export interface AppActions {
   approvedSections: () => ApprovedSection[];
   canvasSections: () => CanvasSection[];
   mdSource: () => string;
+
+  openProject: (id: string) => void;
+  trashProject: (id: string) => void;
+  restoreProject: (id: string) => void;
+  deleteProjectForever: (id: string) => void;
+  openNewProject: () => void;
+  closeNewProject: () => void;
+  npUpload: () => void;
+  npTemplate: () => void;
+  goProjects: () => void;
+  goTrash: () => void;
+  goBrand: () => void;
+  goHelp: () => void;
+  goSettings: () => void;
+  goUsage: () => void;
+  setSettingsTab: (v: 'Profile' | 'Plan') => void;
+  logout: () => void;
 }
 
 interface Ctx {
@@ -376,7 +433,11 @@ interface Ctx {
 const AppContext = createContext<Ctx | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AppState>(() => ({ ...initialState, theme: readStoredTheme() }));
+  const [state, setState] = useState<AppState>(() => ({
+    ...initialState,
+    theme: readStoredTheme(),
+    projects: loadStoredProjects(),
+  }));
   const [hoverThumb, setHoverThumbState] = useState<string | null>(null);
   const navigate = useNavigate();
 
@@ -465,6 +526,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const additions = incoming.slice(0, room).map((f) => ({ id: nextId(), name: f.name, file: f, mimeType: f.type, url: URL.createObjectURL(f) }));
         return { files: [...s.files, ...additions] };
       });
+      if (incoming.length) setTimeout(() => autosaveProject(), 0);
     },
     [patch],
   );
@@ -974,6 +1036,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
     setStatus(s.idx, 'approved');
+    setTimeout(() => autosaveProject(), 0);
     const nextIdx = (s.idx + 1) % Math.max(1, s.files.length);
     clearTimeout(loadTimer.current);
     loadTimer.current = setTimeout(() => goTo(nextIdx), 650);
@@ -1137,6 +1200,234 @@ export function AppProvider({ children }: { children: ReactNode }) {
     patch((st) => ({ pipeline: { ...st.pipeline, frames: result.frames } }));
   }, [patch, currentCategoryId, approvedSections]);
 
+  // ==================================================================
+  // Real project persistence (localStorage) -- ported from the live site's
+  // loadProjects/persistProjects/autosaveProject/openProject/trashProject
+  // family, see PROJECTS_KEY comment above.
+  // ==================================================================
+
+  const persistProjects = useCallback(
+    (projects: ProjectRecord[]) => {
+      try {
+        localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
+      } catch {
+        say("Could not save to this browser's local storage — it may be full or disabled");
+      }
+    },
+    [say],
+  );
+
+  // Real thumbnail: downsamples the actual first approved screenshot through
+  // a canvas -- never a stock/placeholder image standing in for the user's work.
+  const makeCoverThumb = useCallback(
+    (callback: (cover: string | null) => void) => {
+      const sections = approvedSections();
+      const file = sections.length ? sections[0].file : null;
+      if (!file || !file.url) {
+        callback(null);
+        return;
+      }
+      const img = new Image();
+      img.onload = () => {
+        const targetW = 320;
+        const scale = targetW / img.naturalWidth;
+        const targetH = Math.max(1, Math.round(img.naturalHeight * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = targetW;
+        canvas.height = targetH;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          callback(null);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, targetW, targetH);
+        try {
+          callback(canvas.toDataURL('image/jpeg', 0.62));
+        } catch {
+          callback(null);
+        }
+      };
+      img.onerror = () => callback(null);
+      img.src = file.url;
+    },
+    [approvedSections],
+  );
+
+  const projectSnapshot = useCallback((): ProjectSnapshot => {
+    const s = stateRef.current;
+    return {
+      title: s.title,
+      previewTheme: s.previewTheme,
+      previewLayout: s.previewLayout,
+      briefA: s.briefA,
+      briefB: s.briefB,
+    };
+  }, []);
+
+  // Called at real state-changing checkpoints (add files, approve, publish,
+  // preview layout/theme change) -- never on a timer, so "Saved" always means
+  // something changed. A hoisted function declaration (not useCallback) so
+  // earlier-defined actions like addFiles/approve can call it too.
+  function autosaveProject(opts?: { publish?: boolean }) {
+    const s = stateRef.current;
+    if (!s.files.length && !s.title.trim()) return; // nothing real to save yet
+    const id = s.currentProjectId || genProjectId();
+    if (!s.currentProjectId) patch({ currentProjectId: id });
+    const existing = s.projects.find((p) => p.id === id);
+    const now = Date.now();
+    const sectionCount = approvedSections().length;
+
+    const commit = (cover: string | null | undefined) => {
+      const record: ProjectRecord = {
+        id,
+        title: s.title.trim() || 'Untitled case study',
+        status: opts?.publish ? 'Published' : existing ? existing.status : 'Draft',
+        createdAt: existing ? existing.createdAt : now,
+        editedAt: now,
+        deletedAt: existing ? existing.deletedAt : null,
+        sectionCount,
+        cover: cover !== undefined ? cover : existing ? existing.cover : null,
+        snapshot: projectSnapshot(),
+      };
+      const current = stateRef.current.projects;
+      const idx = current.findIndex((p) => p.id === id);
+      const projects = idx >= 0 ? current.map((p, i) => (i === idx ? record : p)) : [record, ...current];
+      persistProjects(projects);
+      patch({ projects, lastSavedAt: now });
+    };
+
+    if (sectionCount > 0 && (!existing || !existing.cover)) makeCoverThumb(commit);
+    else commit(undefined);
+  }
+
+  // Same in-memory session (files still hold live object URLs) resumes
+  // exactly where the user left off. An older project (reopened after a
+  // reload) only has its text/settings -- real screenshots are never faked back.
+  const openProject = useCallback(
+    (id: string) => {
+      const s = stateRef.current;
+      const p = s.projects.find((x) => x.id === id);
+      if (!p) return;
+      if (s.currentProjectId === id && s.files.length) {
+        navigate(approvedSections().length ? '/refine' : s.statuses.length ? '/review' : '/create');
+        return;
+      }
+      patch({
+        currentProjectId: id,
+        title: p.snapshot.title || p.title,
+        previewTheme: p.snapshot.previewTheme || 'minimal',
+        previewLayout: p.snapshot.previewLayout || 'stacked',
+        briefA: p.snapshot.briefA || '',
+        briefB: p.snapshot.briefB || '',
+        files: [],
+        statuses: [],
+        captions: {},
+        captionSource: {},
+        draftStatus: {},
+        draftError: {},
+      });
+      navigate('/create');
+      say(`Reopened "${p.title}" — re-add its screens to continue (this doesn't store image files between sessions)`);
+    },
+    [navigate, approvedSections, patch, say],
+  );
+
+  const trashProject = useCallback(
+    (id: string) => {
+      const current = stateRef.current.projects;
+      const target = current.find((p) => p.id === id);
+      if (!target) return;
+      const projects = current.map((p) => (p.id === id ? { ...p, deletedAt: Date.now() } : p));
+      persistProjects(projects);
+      patch({ projects });
+      say(`"${target.title}" moved to Trash`);
+    },
+    [patch, say, persistProjects],
+  );
+
+  const restoreProject = useCallback(
+    (id: string) => {
+      const current = stateRef.current.projects;
+      const target = current.find((p) => p.id === id);
+      if (!target) return;
+      const projects = current.map((p) => (p.id === id ? { ...p, deletedAt: null } : p));
+      persistProjects(projects);
+      patch({ projects });
+      say(`"${target.title}" restored`);
+    },
+    [patch, say, persistProjects],
+  );
+
+  const deleteProjectForever = useCallback(
+    (id: string) => {
+      const current = stateRef.current.projects;
+      const target = current.find((p) => p.id === id);
+      if (!target) return;
+      const projects = current.filter((p) => p.id !== id);
+      persistProjects(projects);
+      patch({ projects });
+      say(`"${target.title}" permanently deleted`);
+    },
+    [patch, say, persistProjects],
+  );
+
+  // Clears the in-progress project so "New project" always starts genuinely
+  // empty rather than silently continuing whatever was last open.
+  const startNewProject = useCallback(() => {
+    stateRef.current.files.forEach((f) => {
+      if (f.url) URL.revokeObjectURL(f.url);
+    });
+    patch({
+      files: [],
+      statuses: [],
+      captions: {},
+      captionSource: {},
+      draftStatus: {},
+      draftError: {},
+      idx: 0,
+      title: '',
+      briefA: '',
+      briefB: '',
+      currentProjectId: null,
+      lastSavedAt: null,
+      pipeline: { ...initialState.pipeline },
+    });
+  }, [patch]);
+
+  const openNewProject = useCallback(() => patch({ npOpen: true }), [patch]);
+  const closeNewProject = useCallback(() => patch({ npOpen: false }), [patch]);
+
+  const npUpload = useCallback(() => {
+    patch({ npOpen: false });
+    startNewProject();
+    navigate('/create');
+  }, [patch, startNewProject, navigate]);
+
+  const npTemplate = useCallback(() => {
+    patch({ npOpen: false });
+    startNewProject();
+    navigate('/templates');
+  }, [patch, startNewProject, navigate]);
+
+  const goProjects = useCallback(() => navigate('/projects'), [navigate]);
+  const goTrash = useCallback(() => navigate('/trash'), [navigate]);
+  const goBrand = useCallback(() => navigate('/brand'), [navigate]);
+  const goHelp = useCallback(() => navigate('/help'), [navigate]);
+  const goSettings = useCallback(() => {
+    patch({ settingsTab: 'Profile' });
+    navigate('/settings');
+  }, [patch, navigate]);
+  const goUsage = useCallback(() => {
+    patch({ settingsTab: 'Plan' });
+    navigate('/usage');
+  }, [patch, navigate]);
+  const setSettingsTab = useCallback((v: 'Profile' | 'Plan') => patch({ settingsTab: v }), [patch]);
+
+  const logout = useCallback(() => {
+    say('Signed out');
+    navigate('/');
+  }, [say, navigate]);
+
   const goRefine = useCallback(() => {
     if (!approvedIndices().length) {
       say('Approve a section first');
@@ -1158,14 +1449,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     navigate('/preview');
   }, [approvedIndices, say, navigate]);
 
-  const setPreviewLayout = useCallback((v: AppState['previewLayout']) => patch({ previewLayout: v }), [patch]);
-  const setPreviewTheme = useCallback((v: AppState['previewTheme']) => patch({ previewTheme: v }), [patch]);
+  const setPreviewLayout = useCallback(
+    (v: AppState['previewLayout']) => {
+      patch({ previewLayout: v });
+      setTimeout(() => autosaveProject(), 0);
+    },
+    [patch],
+  );
+  const setPreviewTheme = useCallback(
+    (v: AppState['previewTheme']) => {
+      patch({ previewTheme: v });
+      setTimeout(() => autosaveProject(), 0);
+    },
+    [patch],
+  );
 
   const finish = useCallback(() => {
     if (!approvedIndices().length) {
       say('Approve a section first');
       return;
     }
+    autosaveProject({ publish: true });
     navigate('/published');
   }, [approvedIndices, say, navigate]);
 
@@ -1484,6 +1788,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     approvedSections,
     canvasSections,
     mdSource,
+
+    openProject,
+    trashProject,
+    restoreProject,
+    deleteProjectForever,
+    openNewProject,
+    closeNewProject,
+    npUpload,
+    npTemplate,
+    goProjects,
+    goTrash,
+    goBrand,
+    goHelp,
+    goSettings,
+    goUsage,
+    setSettingsTab,
+    logout,
   };
 
   return <AppContext.Provider value={{ state, actions }}>{children}</AppContext.Provider>;

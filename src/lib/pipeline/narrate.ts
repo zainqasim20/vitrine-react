@@ -6,9 +6,12 @@ import type { NarrateInput, Narration } from './types';
 // design system sheet + the confirmed category and generates a problem
 // statement + outcome framing (docs/ai-system-prompt.md Part 7).
 //
-// Ported verbatim from the live site's narrate.js, including its retry
-// discipline -- 3 attempts with exponential backoff, same as perceive.js
-// (unlike Draft's single-attempt /api/analyze-image call).
+// Ported from the live site's narrate.js, including its retry discipline --
+// 3 attempts with exponential backoff, same as perceive.js (unlike Draft's
+// single-attempt /api/analyze-image call). One deliberate divergence from
+// that original: problemLabel/outcomeLabel were added per
+// docs/portfolio-knowledge-base.md Part 3.1 (real case studies use explicit
+// section labels), not present in the original narrate.js snapshot.
 
 const MAX_ATTEMPTS = 3;
 const BASE_DELAY_MS = 1000;
@@ -20,9 +23,11 @@ function wait(ms: number): Promise<void> {
 // A platform-level error comes back as plain text, not JSON -- resp.json()
 // would throw a raw parser exception in that case. Always surfaces a clean,
 // real error instead.
-async function readJsonResponse(resp: Response): Promise<{ narration?: { problemStatement?: string; outcomeFraming?: string } } & { error?: string }> {
+async function readJsonResponse(
+  resp: Response,
+): Promise<{ narration?: { problemLabel?: string; problemStatement?: string; outcomeLabel?: string; outcomeFraming?: string } } & { error?: string }> {
   const raw = await resp.text();
-  let data: { narration?: { problemStatement?: string; outcomeFraming?: string } } & { error?: string };
+  let data: { narration?: { problemLabel?: string; problemStatement?: string; outcomeLabel?: string; outcomeFraming?: string } } & { error?: string };
   try {
     data = raw ? JSON.parse(raw) : {};
   } catch {
@@ -46,7 +51,9 @@ export async function narrateCaseStudy(input: NarrateInput): Promise<Narration> 
       });
       const data = await readJsonResponse(resp);
       return {
+        problemLabel: String(data.narration?.problemLabel || '').trim(),
         problemStatement: String(data.narration?.problemStatement || '').trim(),
+        outcomeLabel: String(data.narration?.outcomeLabel || '').trim(),
         outcomeFraming: String(data.narration?.outcomeFraming || '').trim(),
       };
     } catch (e) {

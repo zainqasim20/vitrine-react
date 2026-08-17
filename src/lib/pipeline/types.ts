@@ -117,9 +117,15 @@ export interface PresentResult {
   frames: PresentFrame[];
 }
 
-// Stage 7 -- Narrate's output. See docs/ai-system-prompt.md Part 7.
+// Stage 7 -- Narrate's output. See docs/ai-system-prompt.md Part 7. Labels
+// are real section headers (e.g. "The Challenge" / "The Solution"), per
+// docs/portfolio-knowledge-base.md Part 3.1's finding that real case studies
+// almost always use explicit section labels -- empty string when Gemini
+// judges a labeled header doesn't fit this project's tone.
 export interface Narration {
+  problemLabel: string;
   problemStatement: string;
+  outcomeLabel: string;
   outcomeFraming: string;
 }
 

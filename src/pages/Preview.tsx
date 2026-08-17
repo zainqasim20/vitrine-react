@@ -139,7 +139,9 @@ export function Preview() {
 
         {state.pipeline.narration && (
           <NarrationIntro
+            problemLabel={state.pipeline.narration.problemLabel}
             problemStatement={state.pipeline.narration.problemStatement}
+            outcomeLabel={state.pipeline.narration.outcomeLabel}
             outcomeFraming={state.pipeline.narration.outcomeFraming}
             bodyFont={theme.bodyFont}
             marginBottom={56}

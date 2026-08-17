@@ -1577,8 +1577,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const narration = s.pipeline.narration;
     if (narration && (narration.problemStatement || narration.outcomeFraming)) {
-      if (narration.problemStatement) lines.push(narration.problemStatement, '');
-      if (narration.outcomeFraming) lines.push(narration.outcomeFraming, '');
+      if (narration.problemStatement) {
+        if (narration.problemLabel) lines.push(`**${narration.problemLabel}**`, '');
+        lines.push(narration.problemStatement, '');
+      }
+      if (narration.outcomeFraming) {
+        if (narration.outcomeLabel) lines.push(`**${narration.outcomeLabel}**`, '');
+        lines.push(narration.outcomeFraming, '');
+      }
     }
 
     if (s.pipeline.frames && s.pipeline.frames.length) {
@@ -1629,7 +1635,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const downloadMd = useCallback(() => saveAs('case-study.md', mdSource(), 'text/markdown'), [saveAs, mdSource]);
   const downloadTxt = useCallback(
-    () => saveAs('case-study.txt', mdSource().replace(/[#_]/g, ''), 'text/plain'),
+    () => saveAs('case-study.txt', mdSource().replace(/[#_*]/g, ''), 'text/plain'),
     [saveAs, mdSource],
   );
   const downloadHtml = useCallback(() => {
@@ -1638,8 +1644,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let body = '';
     if (s.pipeline.frames && s.pipeline.frames.length) {
       const narration = s.pipeline.narration;
-      if (narration?.problemStatement) body += `<p>${escapeHtml(narration.problemStatement)}</p>`;
-      if (narration?.outcomeFraming) body += `<p>${escapeHtml(narration.outcomeFraming)}</p>`;
+      if (narration?.problemStatement) {
+        if (narration.problemLabel) body += `<p><strong>${escapeHtml(narration.problemLabel)}</strong></p>`;
+        body += `<p>${escapeHtml(narration.problemStatement)}</p>`;
+      }
+      if (narration?.outcomeFraming) {
+        if (narration.outcomeLabel) body += `<p><strong>${escapeHtml(narration.outcomeLabel)}</strong></p>`;
+        body += `<p>${escapeHtml(narration.outcomeFraming)}</p>`;
+      }
       body += canvasSections()
         .map((sec) => {
           if (sec.kind === 'design-system') return `<h2>${escapeHtml(sec.label || 'Design System')}</h2><p>${escapeHtml(designSystemSheetToMarkdown(sec.content)).replace(/\n/g, '<br>')}</p>`;

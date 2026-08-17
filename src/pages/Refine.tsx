@@ -153,7 +153,12 @@ export function Refine() {
         </div>
 
         {usingRealSections && state.pipeline.narration && (
-          <NarrationIntro problemStatement={state.pipeline.narration.problemStatement} outcomeFraming={state.pipeline.narration.outcomeFraming} />
+          <NarrationIntro
+            problemLabel={state.pipeline.narration.problemLabel}
+            problemStatement={state.pipeline.narration.problemStatement}
+            outcomeLabel={state.pipeline.narration.outcomeLabel}
+            outcomeFraming={state.pipeline.narration.outcomeFraming}
+          />
         )}
 
         <SectionRule label="Design system" />

@@ -7,19 +7,23 @@
 
 import { isUsableKey, callGeminiStructured, extractText, parseStructuredJson } from './_lib/gemini.js';
 
-// Narration schema -- { problemStatement, outcomeFraming }, matching the
-// live site's Narration shape exactly. The schema object itself wasn't
-// pasted verbatim (only the prompt/route logic was) -- this is the direct,
-// unambiguous JSON-Schema encoding of that already-real response shape,
-// same STRING/OBJECT vocabulary PERCEIVE_SCHEMA already uses. Flag it if
-// the real schema is actually stricter (e.g. length bounds).
+// Narration schema -- { problemLabel, problemStatement, outcomeLabel,
+// outcomeFraming }. The schema object itself wasn't pasted verbatim (only
+// the prompt/route logic was) -- this is the direct, unambiguous
+// JSON-Schema encoding of the real response shape, same STRING/OBJECT
+// vocabulary PERCEIVE_SCHEMA already uses. Flag it if the real schema is
+// actually stricter (e.g. length bounds). Label fields added per
+// docs/portfolio-knowledge-base.md Part 3.1 -- see the promptText's
+// "Section labels" instruction below.
 const NARRATE_SCHEMA = {
   type: 'OBJECT',
   properties: {
+    problemLabel: { type: 'STRING' },
     problemStatement: { type: 'STRING' },
+    outcomeLabel: { type: 'STRING' },
     outcomeFraming: { type: 'STRING' },
   },
-  required: ['problemStatement', 'outcomeFraming'],
+  required: ['problemLabel', 'problemStatement', 'outcomeLabel', 'outcomeFraming'],
 };
 
 export default async function handler(req, res) {
@@ -52,8 +56,12 @@ export default async function handler(req, res) {
     }
 
     const outcomeInstruction = outcome && outcome.trim()
-      ? `\n\nThe designer described the outcome/metric as: "${outcome.trim()}". Reflect this in the outcome framing, in their own terms -- don't inflate or add specifics they didn't give.`
+      ? `\n\nThe designer described the outcome/metric as: "${outcome.trim()}". Reflect this in the outcome framing, in their own terms -- don't inflate or add specifics they didn't give. If this text indicates the project was cut short, didn't ship, or the client relationship ended before completion, reflect that honestly rather than reframing it as a success -- real case studies disclose this plainly, and it reads as more credible, not less.`
       : `\n\nNo outcome or metric was provided. Do not invent one -- either omit an outcome claim entirely or state plainly that no outcome metric was given.`;
+
+    const sectionLabelInstruction = `\n\nSection labels: give each part a short section label, in the style real case studies actually use -- patterns like "The Challenge / The Concept / The Solution", "About the client / Objective / Solution / Result", "Goal / Research / Result", or "01 -- The Idea / 02 -- The Identity / 03 -- The Experience." Pick whichever fits this project's category and tone, or a short label in that same spirit. If a labeled header genuinely doesn't suit this project (e.g. a brief personal piece), leave problemLabel/outcomeLabel as empty strings rather than forcing one.`;
+
+    const categoryExpectationInstruction = `\n\nCategory-expectation framing: if the extracted design system above genuinely reads as a deliberate departure from what's typically expected for this category (an unusual color choice for the category, an atypical layout emphasis), you may frame part of the problem statement or outcome framing around that departure -- naming and rejecting the "obvious" treatment for a category is a real, valued technique. Only use this framing if the actual colors/typography/components given above support it. Never claim a deliberate departure that isn't evidenced by the real extracted data.`;
 
     const promptText = `You are writing the problem statement and outcome framing for a portfolio case study, based only on the structured project data below -- not an image.
 
@@ -62,11 +70,11 @@ Project name: ${projectName || '(untitled)'}
 Client status: ${clientStatus || 'Personal'}
 Tools used: ${(tools && tools.length) ? tools.join(', ') : '(not specified)'}
 Design system summary: ${colorSummary}; ${typeSummary}; ${componentSummary}
-${ndaInstruction}${outcomeInstruction}
+${ndaInstruction}${outcomeInstruction}${sectionLabelInstruction}${categoryExpectationInstruction}
 
 Tone rules: plain, specific language. Do not use inflated adjectives ("revolutionary", "seamless", "game-changing", etc.) unless the designer's own outcome text above already used that word -- in which case you may echo it, not amplify it further.
 
-Respond with the problem statement (2-4 sentences) and outcome framing (1-3 sentences) matching the provided schema exactly.`;
+Respond with a problem label, the problem statement (2-4 sentences), an outcome label, and the outcome framing (1-3 sentences), matching the provided schema exactly.`;
 
     const contents = [{ role: 'user', parts: [{ text: promptText }] }];
 

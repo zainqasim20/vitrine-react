@@ -35,9 +35,19 @@ export function Classify() {
   const stillPerceiving = total > 0 && settledCount < total;
   const result = state.pipeline.classifyResult;
 
-  const needsFallback = !!result?.needsFallback && !state.pipeline.fallbackResolved;
+  // A failed Perceive call used to leave classification silently falling
+  // back to the "not sure yet" Fallback question -- indistinguishable from
+  // genuine low confidence. When every file failed, there's no real data to
+  // classify from at all, so that's surfaced as a real error with a retry,
+  // not routed into Fallback/Interview.
+  const failedFiles = state.files.filter((f) => state.pipeline.perceiveStatus[f.id] === 'error');
+  const settledRecordCount = Object.keys(state.pipeline.perceiveRecords).length;
+  const allPerceiveFailed = !stillPerceiving && failedFiles.length > 0 && settledRecordCount === 0;
+  const partialPerceiveFailure = !stillPerceiving && failedFiles.length > 0 && settledRecordCount > 0;
+
+  const needsFallback = !allPerceiveFailed && !!result?.needsFallback && !state.pipeline.fallbackResolved;
   const needsSoftConfirm = !!result?.needsSoftConfirm && !state.pipeline.softConfirmResolved;
-  const showInterview = !stillPerceiving && !!result && !needsFallback;
+  const showInterview = !stillPerceiving && !allPerceiveFailed && !!result && !needsFallback;
 
   const interview = state.pipeline.interview;
   const categoryId = actions.currentCategoryId();
@@ -54,6 +64,50 @@ export function Classify() {
             <div style={shimmer(20, '58%')} />
             <div style={shimmer(12, '100%')} />
             <div style={shimmer(12, '88%')} />
+          </div>
+        )}
+
+        {allPerceiveFailed && (
+          <div style={{ border: '1px solid var(--border)', borderRadius: 16, padding: 28, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--error)', fontSize: 15, fontWeight: 700 }}>
+              <i className="ph-fill ph-warning-circle" style={{ fontSize: 20 }} />
+              {failedFiles.length === 1 ? "Your screen couldn't be read" : "Your screens couldn't be read"}
+            </span>
+            <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: 'var(--text-2)' }}>
+              Gemini didn't return anything usable, so there's nothing real to classify from yet — this isn't the same as low confidence, the request itself failed.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {failedFiles.map((f) => (
+                <div key={f.id} style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 10, background: 'var(--surface-2)' }}>
+                  <span style={{ fontSize: 13, fontWeight: 700 }}>{f.name}</span>
+                  <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{state.pipeline.perceiveError[f.id] || 'The Gemini request failed.'}</span>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => actions.retryPerceive()}
+              style={{ alignSelf: 'flex-start', height: 36, padding: '0 14px', border: '1px solid var(--border)', borderRadius: 999, background: 'transparent', color: 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            >
+              <i className="ph ph-arrow-clockwise" style={{ fontSize: 14 }} />
+              Try again
+            </button>
+          </div>
+        )}
+
+        {partialPerceiveFailure && (needsFallback || showInterview) && (
+          <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 14px', border: '1px solid var(--border)', borderRadius: 10, background: 'var(--surface-2)' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-2)' }}>
+              <i className="ph-fill ph-warning-circle" style={{ fontSize: 15, color: 'var(--error)' }} />
+              {failedFiles.length === 1 ? '1 screen' : `${failedFiles.length} screens`} couldn't be read by Gemini — continuing with the rest.
+            </span>
+            <button
+              type="button"
+              onClick={() => actions.retryPerceive()}
+              style={{ flex: 'none', height: 28, padding: 0, border: 0, background: 'transparent', color: 'var(--violet)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+            >
+              Try again
+            </button>
           </div>
         )}
 

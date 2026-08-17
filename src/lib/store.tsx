@@ -295,6 +295,7 @@ export interface AppActions {
   maybeDraftAI: (i: number) => void;
   regenerateDraft: () => void;
 
+  retryPerceive: () => void;
   pickFallbackCategory: (catId: string) => void;
   setFallbackOtherText: (text: string) => void;
   pickFallbackOther: () => void;
@@ -787,6 +788,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }));
     });
   }, [patch]);
+
+  // A failed Perceive call previously left classification silently falling
+  // back to the "not sure yet" Fallback question -- indistinguishable from
+  // genuine low confidence. This re-opens exactly the files that errored
+  // (runPerceiveAndClassify skips anything already 'done' or 'error', so
+  // those statuses have to be cleared first) and re-runs the pipeline.
+  const retryPerceive = useCallback(() => {
+    patch((s) => {
+      const perceiveStatus = { ...s.pipeline.perceiveStatus };
+      const perceiveError = { ...s.pipeline.perceiveError };
+      s.files.forEach((f) => {
+        if (perceiveStatus[f.id] === 'error') {
+          delete perceiveStatus[f.id];
+          delete perceiveError[f.id];
+        }
+      });
+      return { pipeline: { ...s.pipeline, perceiveStatus, perceiveError, classifyResult: null } };
+    });
+    runPerceiveAndClassify();
+  }, [patch, runPerceiveAndClassify]);
 
   // Ported from the live site's generate(): real pipeline needs a real
   // vision call to run at all, so only take the /classify path when a
@@ -1783,6 +1804,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setCaption,
     maybeDraftAI,
     regenerateDraft,
+    retryPerceive,
     pickFallbackCategory,
     setFallbackOtherText,
     pickFallbackOther,

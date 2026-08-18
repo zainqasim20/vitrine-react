@@ -15,7 +15,7 @@ export function Published() {
             <i className="ph-fill ph-check-circle" style={{ fontSize: 14 }} />
             Published
           </span>
-          <h1 style={{ fontFamily: "'Bricolage Grotesque', sans-serif", fontWeight: 600, fontSize: 40, lineHeight: 1.1, letterSpacing: '-0.03em' }}>{state.title}</h1>
+          <h1 style={{ fontFamily: "'Bricolage Grotesque', sans-serif", fontWeight: 600, fontSize: 40, lineHeight: 1.1, letterSpacing: '-0.03em' }}>{state.title || 'Untitled case study'}</h1>
           <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 11.5, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--text-3)' }}>
             {approved.length} {approved.length === 1 ? 'section' : 'sections'} · {state.template}
           </span>

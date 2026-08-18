@@ -163,7 +163,7 @@ const initialState: AppState = {
   layers: false,
   hover: null,
   sizes: {},
-  title: 'Rebuilding checkout for repeat buyers',
+  title: '',
   textTab: 'Font',
   lock: true,
   ratio: '16:9',
@@ -435,6 +435,7 @@ export interface AppActions {
   trashProject: (id: string) => void;
   restoreProject: (id: string) => void;
   deleteProjectForever: (id: string) => void;
+  startNewProject: () => void;
   openNewProject: () => void;
   closeNewProject: () => void;
   npUpload: () => void;
@@ -1955,6 +1956,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     trashProject,
     restoreProject,
     deleteProjectForever,
+    startNewProject,
     openNewProject,
     closeNewProject,
     npUpload,

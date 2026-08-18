@@ -4,6 +4,7 @@ import { Logo } from '../components/Logo';
 import { ThemeSwitch } from '../components/ThemeSwitch';
 import { TemplateThumb } from '../components/TemplateThumb';
 import { HOW_STEPS, TEMPLATE_TEASERS } from '../lib/data';
+import { useApp } from '../lib/store';
 
 const WORDS = ['portfolio', 'case study', 'showcase page'];
 
@@ -61,8 +62,17 @@ function useTypewriter() {
 
 export function Landing() {
   const navigate = useNavigate();
+  const { actions } = useApp();
   const typeText = useTypewriter();
   const [landingDemo, setLandingDemo] = useState(0);
+
+  // A fresh visitor clicking "Get started" should always start genuinely
+  // empty -- not silently continue whatever was last open in this browser
+  // (same reasoning as the New Project modal's npUpload()).
+  const startFresh = () => {
+    actions.startNewProject();
+    navigate('/create');
+  };
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--text)' }}>
@@ -95,7 +105,7 @@ export function Landing() {
           <ThemeSwitch />
           <button
             type="button"
-            onClick={() => navigate('/create')}
+            onClick={startFresh}
             style={{ height: 44, padding: '0 20px', border: 0, borderRadius: 10, background: 'var(--violet-gradient)', color: '#FFFFFF', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 15, cursor: 'pointer' }}
           >
             Get started
@@ -179,7 +189,7 @@ export function Landing() {
 
             <button
               type="button"
-              onClick={() => navigate('/create')}
+              onClick={startFresh}
               style={{
                 minHeight: 220,
                 padding: 28,

@@ -137,12 +137,15 @@ export function Preview() {
           </div>
         </div>
 
+        {/* Outcome framing shows as a real closing statement after the
+            sections below, mirroring Refine's canvas exactly -- only the
+            problem statement is the intro here too. */}
         {state.pipeline.narration && (
           <NarrationIntro
             problemLabel={state.pipeline.narration.problemLabel}
             problemStatement={state.pipeline.narration.problemStatement}
-            outcomeLabel={state.pipeline.narration.outcomeLabel}
-            outcomeFraming={state.pipeline.narration.outcomeFraming}
+            outcomeLabel=""
+            outcomeFraming=""
             bodyFont={theme.bodyFont}
             marginBottom={56}
           />
@@ -155,6 +158,17 @@ export function Preview() {
             </RevealItem>
           ))}
         </div>
+
+        {/* Real closing statement -- Narrate's outcome framing, mirroring
+            Refine's Closing section exactly. Preview never had a mock
+            closing block to fall back to, so this stays fully absent
+            (not a placeholder) until real narration resolves. */}
+        {state.pipeline.narration?.outcomeFraming && (
+          <div style={{ marginTop: 64, paddingTop: 40, borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {state.pipeline.narration.outcomeLabel && <span style={mono()}>{state.pipeline.narration.outcomeLabel}</span>}
+            <p style={{ fontFamily: theme.bodyFont, fontSize: 17, lineHeight: 1.65, color: 'var(--text-2)', maxWidth: '62ch', margin: 0 }}>{state.pipeline.narration.outcomeFraming}</p>
+          </div>
+        )}
       </div>
 
       <div style={{ position: 'fixed', left: 0, right: 0, bottom: 24, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>

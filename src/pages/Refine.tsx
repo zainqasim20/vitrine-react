@@ -111,6 +111,7 @@ export function Refine() {
             value={state.title}
             onChange={(e) => actions.setTitle(e.target.value)}
             onFocus={() => actions.select('title')}
+            placeholder="Untitled case study"
             style={{
               width: '100%',
               border: `1.5px solid ${state.sel === 'title' ? 'transparent' : 'transparent'}`,
@@ -152,12 +153,16 @@ export function Refine() {
           </div>
         </div>
 
+        {/* Outcome framing moved to the real Closing section below, where it
+            reads as an actual closing statement instead of duplicating the
+            same paragraph twice on one page -- only the problem statement
+            stays up here as the intro. */}
         {usingRealSections && state.pipeline.narration && (
           <NarrationIntro
             problemLabel={state.pipeline.narration.problemLabel}
             problemStatement={state.pipeline.narration.problemStatement}
-            outcomeLabel={state.pipeline.narration.outcomeLabel}
-            outcomeFraming={state.pipeline.narration.outcomeFraming}
+            outcomeLabel=""
+            outcomeFraming=""
           />
         )}
 
@@ -195,26 +200,32 @@ export function Refine() {
         <SectionRule label="Key features" />
         <div style={state.prevLay === 'grid' ? { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', columnGap: 32 } : { display: 'block' }}>
           {usingRealSections
-            ? realFeatureSections!.map((sec) =>
-                sec.kind === 'generated' ? (
-                  <GeneratedSectionBlock key={sec.id} label={sec.label} headline={sec.headline} body={sec.body} editorial={editorial} />
-                ) : (
-                  <RealImageSectionBlock
-                    key={sec.id}
-                    id={sec.id}
-                    fileUrl={sec.file.url}
-                    fileName={sec.file.name}
-                    headline={sec.headline}
-                    body={sec.body}
-                    fits={fits}
-                    editorial={editorial}
-                    state={state}
-                    actions={actions}
-                    sel={sel}
-                    resizer={resizer}
-                  />
-                ),
-              )
+            ? realFeatureSections!.map((sec, i) => (
+                // A real image section and an adjacent AI-generated one used
+                // to blend into what looked like one contradictory block
+                // (a real screenshot immediately followed by "no screen
+                // uploaded"). Each frame after the first now gets a real
+                // divider, so every real/generated boundary is unambiguous.
+                <div key={sec.id} style={i > 0 ? { borderTop: '1px solid var(--border)', paddingTop: 32 } : undefined}>
+                  {sec.kind === 'generated' ? (
+                    <GeneratedSectionBlock label={sec.label} headline={sec.headline} body={sec.body} editorial={editorial} />
+                  ) : (
+                    <RealImageSectionBlock
+                      id={sec.id}
+                      fileUrl={sec.file.url}
+                      fileName={sec.file.name}
+                      headline={sec.headline}
+                      body={sec.body}
+                      fits={fits}
+                      editorial={editorial}
+                      state={state}
+                      actions={actions}
+                      sel={sel}
+                      resizer={resizer}
+                    />
+                  )}
+                </div>
+              ))
             : approved.map((i) => {
                 const id = `s${i}`;
                 const d = DRAFTS[i % DRAFTS.length];
@@ -330,11 +341,30 @@ export function Refine() {
           </button>
         </div>
 
-        <SectionRule label="Closing" />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 24 }}>
-          <h3 style={{ fontFamily: "'Bricolage Grotesque', sans-serif", fontWeight: 600, fontSize: 28, lineHeight: 1.2, letterSpacing: '-0.02em' }}>Northwind shipped in eleven weeks.</h3>
-          <p style={{ fontSize: 17, lineHeight: 1.6, color: 'var(--text-2)', maxWidth: '60ch' }}>Written and art-directed by the designer who did the work. Reach out if you want the longer version.</p>
-        </div>
+        {/* Real pipeline: closing is Narrate's outcome framing -- the part
+            of the labeled output that's actually a closing statement, not
+            the fake "Northwind shipped..." mock. Omitted entirely (no
+            dangling "Closing" divider) while narration hasn't resolved yet,
+            same never-blocks honesty as the intro block. Untouched mock
+            fallback when the pipeline never ran (no Gemini key). */}
+        {(!usingRealSections || state.pipeline.narration?.outcomeFraming) && (
+          <>
+            <SectionRule label="Closing" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 24 }}>
+              {usingRealSections && state.pipeline.narration ? (
+                <>
+                  {state.pipeline.narration.outcomeLabel && <span style={mono()}>{state.pipeline.narration.outcomeLabel}</span>}
+                  <p style={{ fontSize: 17, lineHeight: 1.6, color: 'var(--text-2)', maxWidth: '60ch' }}>{state.pipeline.narration.outcomeFraming}</p>
+                </>
+              ) : (
+                <>
+                  <h3 style={{ fontFamily: "'Bricolage Grotesque', sans-serif", fontWeight: 600, fontSize: 28, lineHeight: 1.2, letterSpacing: '-0.02em' }}>Northwind shipped in eleven weeks.</h3>
+                  <p style={{ fontSize: 17, lineHeight: 1.6, color: 'var(--text-2)', maxWidth: '60ch' }}>Written and art-directed by the designer who did the work. Reach out if you want the longer version.</p>
+                </>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       <div style={{ width: 720, maxWidth: '100%', margin: '20px auto 0', display: 'flex', flexDirection: 'column', gap: 10 }}>

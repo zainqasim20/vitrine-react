@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Logo } from '../components/Logo';
 import { ThemeSwitch } from '../components/ThemeSwitch';
 import { TemplateThumb } from '../components/TemplateThumb';
-import { HOW_STEPS, TEMPLATE_TEASERS } from '../lib/data';
+import { HOW_STEPS, TEMPLATE_QUERY, TEMPLATE_TEASERS } from '../lib/data';
 import { useApp } from '../lib/store';
 
 const WORDS = ['portfolio', 'case study', 'showcase page'];
@@ -62,7 +62,7 @@ function useTypewriter() {
 
 export function Landing() {
   const navigate = useNavigate();
-  const { actions } = useApp();
+  const { state, actions } = useApp();
   const typeText = useTypewriter();
   const [landingDemo, setLandingDemo] = useState(0);
 
@@ -73,6 +73,14 @@ export function Landing() {
     actions.startNewProject();
     navigate('/create');
   };
+
+  // Same real Pexels fetch as the Templates gallery, triggered for this
+  // page's own smaller teaser set -- kept in sync with apiStatus so a fetch
+  // that arrives before /api/status resolves still runs once it does.
+  useEffect(() => {
+    TEMPLATE_TEASERS.forEach((t) => actions.fetchStockPhoto(TEMPLATE_QUERY[t.kind]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.apiStatus.checked, state.apiStatus.pexels]);
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--text)' }}>
@@ -256,17 +264,58 @@ export function Landing() {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 20 }}>
-              {TEMPLATE_TEASERS.map((t) => (
-                <div key={t.name} style={{ border: '1px solid var(--border)', borderRadius: 16, background: 'var(--surface)', overflow: 'hidden' }}>
-                  <div style={{ aspectRatio: '4 / 3', background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: 20 }}>
-                    <TemplateThumb kind={t.kind} />
+              {TEMPLATE_TEASERS.map((t) => {
+                const query = TEMPLATE_QUERY[t.kind];
+                const stock = actions.getStockPhoto(query);
+                const isReady = stock.status === 'ready';
+                const tagTitle =
+                  stock.status === 'unavailable'
+                    ? 'Live photos need a Pexels key'
+                    : stock.status === 'error'
+                      ? 'Sample photo unavailable right now'
+                      : isReady
+                        ? `Photo: ${stock.photo.photographer} / Pexels`
+                        : 'Loading sample photo…';
+                return (
+                  <div key={t.name} style={{ border: '1px solid var(--border)', borderRadius: 16, background: 'var(--surface)', overflow: 'hidden' }}>
+                    <div style={{ position: 'relative', aspectRatio: '4 / 3', background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: isReady ? 0 : 20 }}>
+                      {isReady ? (
+                        <img
+                          src={stock.photo.thumb}
+                          alt={stock.photo.alt || t.name}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        />
+                      ) : (
+                        <TemplateThumb kind={t.kind} />
+                      )}
+                      <span
+                        title={tagTitle}
+                        style={{
+                          position: 'absolute',
+                          right: 10,
+                          top: 10,
+                          height: 20,
+                          padding: '0 8px',
+                          borderRadius: 999,
+                          background: 'var(--surface-3)',
+                          color: 'var(--text-3)',
+                          fontFamily: "'Geist Mono', monospace",
+                          fontSize: 9.5,
+                          letterSpacing: '0.03em',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                        }}
+                      >
+                        Sample
+                      </span>
+                    </div>
+                    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <span style={{ fontSize: 15, fontWeight: 700 }}>{t.name}</span>
+                      <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 11.5, letterSpacing: '0.04em', color: 'var(--text-3)' }}>{t.meta}</span>
+                    </div>
                   </div>
-                  <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <span style={{ fontSize: 15, fontWeight: 700 }}>{t.name}</span>
-                    <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 11.5, letterSpacing: '0.04em', color: 'var(--text-3)' }}>{t.meta}</span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </section>

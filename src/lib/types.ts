@@ -26,6 +26,24 @@ export interface PexelsPhoto {
 
 export type StockPhotoEntry = { status: 'loading' } | { status: 'unavailable' } | { status: 'ready'; photo: PexelsPhoto } | { status: 'error'; message: string };
 
+// Real Scene Construction Framework treatment (CSS/layout only, no image
+// generation) applied to Key Features frames -- ported from
+// docs/presentation-styles-creativity-engine.md Part 1 (the 8 layers),
+// Part 3 (category -> environment/mood mapping) and Part 6 (consistency
+// guardrails: one color grade + one dominant surface family per project).
+// A pure function of the project's own real extracted colors + real
+// Classify category, so every frame gets the identical treatment -- see
+// store.tsx's sceneTreatment().
+export interface SceneTreatment {
+  category: string | null;
+  accentHex: string | null;
+  panelBackground: string;
+  imageShadow: string;
+  tiltDeg: number;
+  glossy: boolean;
+  padding: number;
+}
+
 export type ScreenStatus = 'pending' | 'loading' | 'drafted' | 'error' | 'skipped' | 'approved';
 
 export interface UploadedFile {

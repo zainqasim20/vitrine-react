@@ -2,7 +2,7 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp, type AppActions } from '../lib/store';
 import { DRAFTS, JOURNEY, MOTION_PRESETS, MOTION_TRIGGERS, PALETTE, PATTERNS } from '../lib/data';
-import type { AppState, CanvasSection } from '../lib/types';
+import type { AppState, CanvasSection, SceneTreatment } from '../lib/types';
 import type { DesignSystemSheet } from '../lib/pipeline/types';
 import { NarrationIntro } from '../components/NarrationIntro';
 
@@ -60,6 +60,11 @@ export function Refine() {
   const usingRealSections = state.apiStatus.gemini;
   const realSections: CanvasSection[] | null = usingRealSections ? actions.canvasSections() : null;
   const realFeatureSections = realSections?.filter((sec) => sec.kind !== 'design-system') || null;
+  // Computed once per render from the project's own real extracted colors +
+  // category, then reused for every Key Features frame below -- see
+  // sceneTreatment()'s comment in store.tsx for why that guarantees
+  // consistency across frames rather than needing to enforce it here.
+  const scene = usingRealSections ? actions.sceneTreatment() : null;
 
   const sel = state.sel;
   const kind = typeOf(sel);
@@ -208,7 +213,7 @@ export function Refine() {
                 // divider, so every real/generated boundary is unambiguous.
                 <div key={sec.id} style={i > 0 ? { borderTop: '1px solid var(--border)', paddingTop: 32 } : undefined}>
                   {sec.kind === 'generated' ? (
-                    <GeneratedSectionBlock label={sec.label} headline={sec.headline} body={sec.body} editorial={editorial} />
+                    <GeneratedSectionBlock label={sec.label} headline={sec.headline} body={sec.body} editorial={editorial} scene={scene!} />
                   ) : (
                     <RealImageSectionBlock
                       id={sec.id}
@@ -222,6 +227,7 @@ export function Refine() {
                       actions={actions}
                       sel={sel}
                       resizer={resizer}
+                      scene={scene!}
                     />
                   )}
                 </div>
@@ -854,10 +860,15 @@ function RealDesignSystemBlock({ sheet }: { sheet: DesignSystemSheet }) {
 // Present's generated placeholder for a required slot with no matching
 // uploaded screen -- real content synthesized from the real design system
 // sheet, always tagged so it's never mistaken for a real screenshot.
-function GeneratedSectionBlock({ label, headline, body, editorial }: { label: string; headline: string; body: string; editorial: boolean }) {
+function GeneratedSectionBlock({ label, headline, body, editorial, scene }: { label: string; headline: string; body: string; editorial: boolean; scene: SceneTreatment }) {
   return (
     <div style={{ position: 'relative', paddingBottom: 48, ...(editorial ? { display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 28, alignItems: 'start' } : {}) }}>
-      <div style={{ position: 'relative', marginBottom: 24, height: 200, border: '1.5px dashed var(--border)', borderRadius: 10, background: 'var(--surface-2)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, gridRow: editorial ? 'span 2' : 'auto' }}>
+      {/* No real screenshot to stage here, so only the Scene Construction
+          Framework's Surface/color-grade layer applies (the project's real
+          accent color, same as every other frame) -- the dashed border and
+          "no screen uploaded" badge stay untouched so this never looks like
+          a real, framed screenshot. */}
+      <div style={{ position: 'relative', marginBottom: 24, height: 200, border: '1.5px dashed var(--border)', borderRadius: 10, background: scene.panelBackground, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, gridRow: editorial ? 'span 2' : 'auto' }}>
         <i className="ph ph-image-square" style={{ fontSize: 28, color: 'var(--text-3)' }} />
         <span style={{ height: 22, padding: '0 10px', borderRadius: 999, background: 'var(--violet-gradient)', color: '#FFFFFF', fontFamily: "'Geist Mono', monospace", fontSize: 11, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
           <i className="ph-fill ph-sparkle" style={{ fontSize: 11 }} />
@@ -885,6 +896,7 @@ function RealImageSectionBlock({
   actions,
   sel,
   resizer,
+  scene,
 }: {
   id: string;
   fileUrl?: string;
@@ -897,6 +909,7 @@ function RealImageSectionBlock({
   actions: AppActions;
   sel: string | null;
   resizer: (id: string, dx: number, dy: number) => (e: ReactPointerEvent) => void;
+  scene: SceneTreatment;
 }) {
   const sz = actions.sizeOf(id);
   const hovered = state.hover === id;
@@ -916,37 +929,53 @@ function RealImageSectionBlock({
         </span>
       )}
 
-      <div onClick={(e) => { stop(e); actions.select(`${id}-img`); }} style={{ position: 'relative', marginBottom: 24, cursor: 'pointer', gridRow: editorial ? 'span 2' : 'auto' }}>
-        <div
-          style={{
-            position: 'relative',
-            width: fits ? sz.w : '100%',
-            height: sz.h,
-            maxWidth: '100%',
-            border: '1px solid var(--border)',
-            borderRadius: 10,
-            background: 'var(--surface-2)',
-            overflow: 'hidden',
-            filter: `brightness(${state.adjB}%) contrast(${state.adjC}%) saturate(${state.adjS}%)`,
-          }}
-        >
-          {fileUrl && <img src={fileUrl} alt={fileName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
-        </div>
-
-        {selImg && (
-          <>
-            <span style={{ ...pickTag(-26), whiteSpace: 'nowrap' }}>Screenshot · {sz.w} × {sz.h}</span>
-            {!fits && <span style={{ position: 'absolute', top: -1.5, left: -1.5, right: -1.5, height: sz.h + 3, border: '1.5px solid var(--violet)', borderRadius: 10, pointerEvents: 'none' }} />}
-            {fits && (
-              <>
-                <span style={{ position: 'absolute', top: -1.5, left: -1.5, width: sz.w + 3, height: sz.h + 3, border: '1.5px solid var(--violet)', borderRadius: 10, pointerEvents: 'none' }} />
-                {handleSpots(sz).map((h) => (
-                  <span key={h.key} onPointerDown={resizer(`${id}-img`, h.dx, h.dy)} style={{ position: 'absolute', top: h.top, left: h.left, width: 10, height: 10, border: '1.5px solid var(--violet)', borderRadius: 2, background: 'var(--surface)', cursor: h.cursor }} />
-                ))}
-              </>
+      {/* Scene Construction Framework's Surface (panel background) and
+          Composition (generous negative space) layers, as a "mat" around
+          the real screenshot. Deliberately NOT rotated (Angle layer) here,
+          unlike Preview -- this is the interactive canvas, and the resize
+          handles below are positioned in the same coordinate space as the
+          image box, so a CSS rotate would rotate the handles out of sync
+          with the pointer math. Preview (read-only) gets the real tilt. */}
+      <div style={{ background: scene.panelBackground, borderRadius: 20, padding: scene.padding, marginBottom: 24, gridRow: editorial ? 'span 2' : 'auto' }}>
+        <div onClick={(e) => { stop(e); actions.select(`${id}-img`); }} style={{ position: 'relative', cursor: 'pointer' }}>
+          <div
+            style={{
+              position: 'relative',
+              width: fits ? sz.w : '100%',
+              height: sz.h,
+              maxWidth: '100%',
+              border: '1px solid var(--border)',
+              borderRadius: 10,
+              background: 'var(--surface-2)',
+              overflow: 'hidden',
+              boxShadow: scene.imageShadow,
+              filter: `brightness(${state.adjB}%) contrast(${state.adjC}%) saturate(${state.adjS}%)`,
+            }}
+          >
+            {fileUrl && <img src={fileUrl} alt={fileName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+            {scene.glossy && (
+              <span
+                aria-hidden
+                style={{ position: 'absolute', inset: 0, background: 'linear-gradient(160deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0) 42%)', pointerEvents: 'none' }}
+              />
             )}
-          </>
-        )}
+          </div>
+
+          {selImg && (
+            <>
+              <span style={{ ...pickTag(-26), whiteSpace: 'nowrap' }}>Screenshot · {sz.w} × {sz.h}</span>
+              {!fits && <span style={{ position: 'absolute', top: -1.5, left: -1.5, right: -1.5, height: sz.h + 3, border: '1.5px solid var(--violet)', borderRadius: 10, pointerEvents: 'none' }} />}
+              {fits && (
+                <>
+                  <span style={{ position: 'absolute', top: -1.5, left: -1.5, width: sz.w + 3, height: sz.h + 3, border: '1.5px solid var(--violet)', borderRadius: 10, pointerEvents: 'none' }} />
+                  {handleSpots(sz).map((h) => (
+                    <span key={h.key} onPointerDown={resizer(`${id}-img`, h.dx, h.dy)} style={{ position: 'absolute', top: h.top, left: h.left, width: 10, height: 10, border: '1.5px solid var(--violet)', borderRadius: 2, background: 'var(--surface)', cursor: h.cursor }} />
+                  ))}
+                </>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       <div onClick={(e) => { stop(e); actions.select(`${id}-head`); }} style={{ position: 'relative', cursor: 'pointer', marginBottom: 12 }}>

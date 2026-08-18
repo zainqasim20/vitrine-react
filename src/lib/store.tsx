@@ -11,7 +11,7 @@ import { narrateCaseStudy } from './pipeline/narrate';
 import categorySignals from './pipeline/config/category-signals.json';
 import moduleSequences from './pipeline/config/module-sequences.json';
 import type { ApprovedSection, CategorySignalsConfig, DesignSystemSheet, ModuleSequencesConfig, PresentFrame } from './pipeline/types';
-import type { Caption, CanvasSection, ClientStatus, ProjectRecord, ProjectSnapshot, StockPhotoEntry } from './types';
+import type { Caption, CanvasSection, ClientStatus, ProjectRecord, ProjectSnapshot, SceneTreatment, StockPhotoEntry } from './types';
 
 const PIPELINE_CONFIG = categorySignals as unknown as CategorySignalsConfig;
 const MODULE_SEQUENCES = moduleSequences as unknown as ModuleSequencesConfig;
@@ -64,6 +64,19 @@ function parseDraftJson(raw: string): Caption {
 
 function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+}
+
+// Used by sceneTreatment() to tint panel backgrounds/shadows from a real
+// extracted hex color. Falls back to the app's own brand violet if the
+// extracted value isn't parseable, rather than silently rendering nothing.
+function hexToRgba(hex: string, alpha: number): string {
+  const clean = hex.replace('#', '');
+  const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  if ([r, g, b].some((n) => Number.isNaN(n))) return `rgba(122, 71, 245, ${alpha})`;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 // Ported unchanged from the live site's designSystemSheetToMarkdown, used by
@@ -453,6 +466,7 @@ export interface AppActions {
   useTemplate: (name: string) => void;
   getStockPhoto: (query: string) => StockPhotoEntry;
   fetchStockPhoto: (query: string) => void;
+  sceneTreatment: () => SceneTreatment;
 }
 
 interface Ctx {
@@ -1558,6 +1572,84 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [patch],
   );
 
+  // Real Scene Construction Framework treatment (CSS/layout only) for Key
+  // Features frames -- ported from
+  // docs/presentation-styles-creativity-engine.md Part 1 (the 8 layers),
+  // Part 3 (category -> environment/mood mapping) and Part 6 (consistency
+  // guardrails). A pure function of the project's own real extracted
+  // colors + real Classify category -- same inputs always produce the same
+  // output, so every frame in a project gets the identical treatment with
+  // no extra state to keep in sync (Part 6: one color grade / one
+  // dominant surface family per project).
+  //
+  // Category rows below marked "doc: <row>" are a direct Part 3 match.
+  // Rows marked "my nearest analog" or "my own extension" are my own
+  // judgment call where the doc's table doesn't name this exact category
+  // (real Classify's 7 categories don't line up 1:1 with Part 3's table) --
+  // not presented as verbatim doc guidance. Layer 2 (Angle) is capped at a
+  // small tilt everywhere per Part 6's own rule that staging drama must
+  // never compromise legibility of the real uploaded content -- dramatic
+  // tilt (the doc's 45-75 degree range) is excluded entirely since these
+  // are real screenshots, not staged product photography.
+  const sceneTreatment = useCallback((): SceneTreatment => {
+    const s = stateRef.current;
+    const colors = s.pipeline.designSystemSheet?.colors ?? [];
+    const accent = colors.find((c) => c.role === 'accent') || colors.find((c) => c.role === 'primary') || colors[0] || null;
+    const category = currentCategoryId();
+    const PADDING = 40;
+
+    if (!accent) {
+      // No real color extracted -- degrade to the plain, pre-existing
+      // treatment rather than fabricate a color.
+      return { category, accentHex: null, panelBackground: 'var(--surface-2)', imageShadow: '0 8px 20px rgba(20,20,26,0.08)', tiltDeg: 0, glossy: false, padding: PADDING };
+    }
+
+    const tint = (alpha: number) => hexToRgba(accent.hex, alpha);
+
+    switch (category) {
+      case 'mobile-app':
+        // doc: Mobile App (consumer/lifestyle) -- bold flat color,
+        // flat/even lighting; Part 3's deviation note says bright
+        // saturated flat colors real-confirmed to outperform "safe" dark
+        // defaults here.
+        return { category, accentHex: accent.hex, panelBackground: accent.hex, imageShadow: `0 0 0 1px ${tint(0.18)}, 0 14px 28px rgba(20,20,26,0.16)`, tiltDeg: 5, glossy: true, padding: PADDING };
+      case 'product-design':
+        // my nearest analog: doc has no Product Design row -- closest is
+        // Packaging (flat studio, sharp specular highlight).
+        return { category, accentHex: accent.hex, panelBackground: 'var(--surface-2)', imageShadow: '0 8px 16px rgba(20,20,26,0.18)', tiltDeg: 0, glossy: true, padding: PADDING };
+      case 'branding':
+        // doc: Brand Identity/Logo -- flat brand color, flat lighting.
+        return { category, accentHex: accent.hex, panelBackground: tint(0.35), imageShadow: '0 6px 14px rgba(20,20,26,0.10)', tiltDeg: 0, glossy: false, padding: PADDING };
+      case 'architecture':
+        // my nearest analog: doc has no Architecture row -- closest is
+        // 3D/CGI (dramatic environment, cinematic light).
+        return {
+          category,
+          accentHex: accent.hex,
+          panelBackground: `linear-gradient(160deg, ${tint(0.9)} 0%, #14141A 100%)`,
+          imageShadow: `0 0 50px ${tint(0.28)}, 0 20px 40px rgba(0,0,0,0.28)`,
+          tiltDeg: -4,
+          glossy: true,
+          padding: PADDING,
+        };
+      case 'illustration':
+        // doc is explicit here: "the art itself carries all mood; no
+        // external scene-staging applies" -- left at the plain,
+        // pre-existing treatment on purpose, not upgraded.
+        return { category, accentHex: accent.hex, panelBackground: 'var(--surface-2)', imageShadow: '0 8px 20px rgba(20,20,26,0.08)', tiltDeg: 0, glossy: false, padding: PADDING };
+      case 'graphic-design':
+        // my own extension -- doc has no Graphic Design row; treated like
+        // Illustration's unstaged default.
+        return { category, accentHex: accent.hex, panelBackground: 'var(--surface-2)', imageShadow: '0 8px 20px rgba(20,20,26,0.10)', tiltDeg: 0, glossy: false, padding: PADDING };
+      case 'web-ui':
+      default:
+        // doc splits "Website" by vertical (AI/SaaS vs healthcare/real
+        // estate) real Classify can't detect -- defaulting to the calmer,
+        // non-dramatic row rather than guessing a vertical.
+        return { category, accentHex: accent.hex, panelBackground: tint(0.12), imageShadow: '0 12px 32px rgba(20,20,26,0.10)', tiltDeg: 0, glossy: false, padding: PADDING };
+    }
+  }, [currentCategoryId]);
+
   const goRefine = useCallback(() => {
     if (!approvedIndices().length) {
       say('Approve a section first');
@@ -2011,6 +2103,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     useTemplate,
     getStockPhoto,
     fetchStockPhoto,
+    sceneTreatment,
   };
 
   return <AppContext.Provider value={{ state, actions }}>{children}</AppContext.Provider>;

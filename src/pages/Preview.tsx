@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../lib/store';
-import type { CanvasSection } from '../lib/types';
+import type { CanvasSection, SceneTreatment } from '../lib/types';
 import { NarrationIntro } from '../components/NarrationIntro';
 
 // Real, public case-study preview -- ported from the live site's
@@ -35,6 +35,11 @@ export function Preview() {
   const { state, actions } = useApp();
   const navigate = useNavigate();
   const sections = actions.canvasSections();
+  // Same real Scene Construction Framework treatment as Refine's canvas --
+  // computed once from the project's own real colors/category and reused
+  // for every frame below, so Preview can never disagree with what Refine
+  // shows (same principle as canvasSections() itself).
+  const scene = actions.sceneTreatment();
   const theme = THEMES.find((t) => t.key === state.previewTheme) || THEMES[0];
   const layout = state.previewLayout;
   const cursorDot = state.cursorFx === 'Dot';
@@ -154,7 +159,7 @@ export function Preview() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 64 }}>
           {sections.map((sec) => (
             <RevealItem key={sec.id} enabled={state.reveal} amount={state.revealAmt}>
-              <PreviewSectionBlock sec={sec} layout={layout} theme={theme} imgFx={state.imgFx} />
+              <PreviewSectionBlock sec={sec} layout={layout} theme={theme} imgFx={state.imgFx} scene={scene} />
             </RevealItem>
           ))}
         </div>
@@ -279,41 +284,58 @@ function PreviewSectionBlock({
   layout,
   theme,
   imgFx,
+  scene,
 }: {
   sec: CanvasSection;
   layout: 'stacked' | 'side-by-side' | 'compact';
   theme: (typeof THEMES)[number];
   imgFx: string;
+  scene: SceneTreatment;
 }) {
   if (sec.kind === 'design-system') return <DesignSystemPreviewBlock sec={sec} />;
-  if (sec.kind === 'generated') return <GeneratedPreviewBlock sec={sec} theme={theme} />;
+  if (sec.kind === 'generated') return <GeneratedPreviewBlock sec={sec} theme={theme} scene={scene} />;
 
   const [hovered, setHovered] = useState(false);
   const hoverTransform = imgFx === 'Zoom' && hovered ? 'scale(1.03)' : imgFx === 'Lift' && hovered ? 'translateY(-4px)' : 'none';
   const imageFirst = layout !== 'side-by-side';
   const row = layout === 'side-by-side' || layout === 'compact';
+  // Scene Construction Framework's Surface (panel background) and
+  // Composition (negative space) layers wrap the real screenshot; Angle
+  // (tiltDeg) and Lighting (imageShadow) apply to the framed box itself.
+  // Unlike Refine's canvas, this is read-only display -- no resize handles
+  // to keep in sync -- so the real tilt applies here, capped small per
+  // Part 6's legibility guardrail (see sceneTreatment() in store.tsx).
   const imgWrap = (
-    <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      data-hover-target
-      style={{
-        flex: row ? '0 0 auto' : 'none',
-        width: row ? (layout === 'compact' ? 160 : '46%') : '100%',
-        aspectRatio: layout === 'compact' ? '4 / 3' : '16 / 10',
-        overflow: 'hidden',
-        borderRadius: 12,
-        border: '1px solid var(--border)',
-        boxShadow: '0 8px 20px rgba(20,20,26,0.08)',
-      }}
-    >
-      {sec.file.url && (
-        <img
-          src={sec.file.url}
-          alt={sec.file.name}
-          style={{ width: '100%', height: '100%', objectFit: 'cover', transform: hoverTransform, transition: 'transform 220ms ease-out' }}
-        />
-      )}
+    <div style={{ flex: row ? '0 0 auto' : 'none', width: row ? (layout === 'compact' ? 160 : '46%') : '100%', background: scene.panelBackground, borderRadius: 20, padding: scene.padding }}>
+      <div
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        data-hover-target
+        style={{
+          position: 'relative',
+          width: '100%',
+          aspectRatio: layout === 'compact' ? '4 / 3' : '16 / 10',
+          overflow: 'hidden',
+          borderRadius: 12,
+          border: '1px solid var(--border)',
+          boxShadow: scene.imageShadow,
+          transform: `rotate(${scene.tiltDeg}deg)`,
+        }}
+      >
+        {sec.file.url && (
+          <img
+            src={sec.file.url}
+            alt={sec.file.name}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', transform: hoverTransform, transition: 'transform 220ms ease-out' }}
+          />
+        )}
+        {scene.glossy && (
+          <span
+            aria-hidden
+            style={{ position: 'absolute', inset: 0, background: 'linear-gradient(160deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0) 42%)', pointerEvents: 'none' }}
+          />
+        )}
+      </div>
     </div>
   );
   const textBlock = (
@@ -370,10 +392,12 @@ function DesignSystemPreviewBlock({ sec }: { sec: Extract<CanvasSection, { kind:
   );
 }
 
-function GeneratedPreviewBlock({ sec, theme }: { sec: Extract<CanvasSection, { kind: 'generated' }>; theme: (typeof THEMES)[number] }) {
+function GeneratedPreviewBlock({ sec, theme, scene }: { sec: Extract<CanvasSection, { kind: 'generated' }>; theme: (typeof THEMES)[number]; scene: SceneTreatment }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div style={{ height: 220, borderRadius: 12, border: '1.5px dashed var(--border)', background: 'var(--surface-2)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+      {/* Surface/color-grade layer only, same reasoning as Refine's
+          GeneratedSectionBlock -- no real screenshot to stage. */}
+      <div style={{ height: 220, borderRadius: 12, border: '1.5px dashed var(--border)', background: scene.panelBackground, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
         <i className="ph ph-image-square" style={{ fontSize: 26, color: 'var(--text-3)' }} />
         <span style={{ height: 22, padding: '0 10px', borderRadius: 999, background: theme.accent, color: '#FFFFFF', fontFamily: "'Geist Mono', monospace", fontSize: 11, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
           <i className="ph-fill ph-sparkle" style={{ fontSize: 11 }} />

@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { useApp, type AppActions } from '../lib/store';
 import { DRAFTS, JOURNEY, MOTION_PRESETS, MOTION_TRIGGERS, PALETTE, PATTERNS } from '../lib/data';
 import type { AppState, CanvasSection, SceneTreatment } from '../lib/types';
-import type { DesignSystemSheet } from '../lib/pipeline/types';
+import type { DesignSystemColor, DesignSystemSheet } from '../lib/pipeline/types';
 import { NarrationIntro } from '../components/NarrationIntro';
+import { deviceFrameBoxStyle, deviceFrameKindFor, DeviceChrome, type DeviceFrameKind } from '../components/DeviceFrame';
+import { GeneratedFrameArt } from '../components/GeneratedFrameArt';
 
 const SPEED_SCALE: Record<string, number> = { '0.5x': 2, '1x': 1, '1.5x': 0.7, '2x': 0.5 };
 const EASE_CSS: Record<string, string> = { Linear: 'linear', Ease: 'ease-in-out', Bounce: 'cubic-bezier(.34,1.56,.64,1)' };
@@ -65,6 +67,10 @@ export function Refine() {
   // sceneTreatment()'s comment in store.tsx for why that guarantees
   // consistency across frames rather than needing to enforce it here.
   const scene = usingRealSections ? actions.sceneTreatment() : null;
+  // Real first approved screenshot (if any) for the Cover Variants section
+  // below -- same real file/device-chrome data the Key Features frames use.
+  const firstImageSection = realFeatureSections?.find((sec) => sec.kind === 'image');
+  const coverDeviceKind = firstImageSection ? deviceFrameKindFor(state.pipeline.perceiveRecords[firstImageSection.file.id]) : 'none';
 
   const sel = state.sel;
   const kind = typeOf(sel);
@@ -228,6 +234,7 @@ export function Refine() {
                       sel={sel}
                       resizer={resizer}
                       scene={scene!}
+                      deviceKind={deviceFrameKindFor(state.pipeline.perceiveRecords[sec.file.id])}
                     />
                   )}
                 </div>
@@ -388,7 +395,16 @@ export function Refine() {
             const on = state.cover === i;
             return (
               <div key={name} onClick={() => actions.setCover(i)} style={{ border: `1.5px solid ${on ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 12, overflow: 'hidden', background: 'var(--surface)', cursor: 'pointer' }}>
-                <div style={{ position: 'relative', aspectRatio: '16 / 9', overflow: 'hidden', background: i === 0 ? 'var(--violet-gradient)' : i === 1 ? '#F4F6FB' : 'linear-gradient(160deg, #BEDFD7 0%, #8FC4BA 100%)' }} />
+                <div style={{ position: 'relative', aspectRatio: '16 / 9', overflow: 'hidden' }}>
+                  <CoverVariant
+                    index={i}
+                    scene={scene}
+                    title={state.title}
+                    firstImageSection={firstImageSection}
+                    deviceKind={coverDeviceKind}
+                    colors={state.pipeline.designSystemSheet?.colors ?? []}
+                  />
+                </div>
                 <div style={{ padding: '10px 12px' }}>
                   <span style={{ fontSize: 13, fontWeight: 700 }}>{name}</span>
                 </div>
@@ -814,47 +830,163 @@ export function Refine() {
 
 // Real Design System block -- the actual extracted sheet from Extract,
 // same fields as the editable Design System screen, read-only here.
+// Redesigned from a bordered admin-style spec table into a slim strip that
+// sits in the normal document flow -- my own visual treatment, same real
+// data as before (nothing new extracted). A thin rule in the project's own
+// real accent color stands in for the old box border; the "Aa" specimen is
+// now actually sized from the real extracted heading/display band instead
+// of a fixed 56px, so it reads as that project's real type scale.
 function RealDesignSystemBlock({ sheet }: { sheet: DesignSystemSheet }) {
+  const hasComponents = Object.entries(sheet.components).some(([, v]) => v.count > 0);
+  if (!sheet.colors.length && !sheet.typography.length && !hasComponents) {
+    return (
+      <div style={{ marginBottom: 48 }}>
+        <span style={{ fontSize: 14, color: 'var(--text-3)' }}>Nothing was confidently extracted from these screens.</span>
+      </div>
+    );
+  }
+
+  const specimen = sheet.typography.find((t) => t.role === 'heading') || sheet.typography.find((t) => t.role === 'display') || sheet.typography[0];
+  const ruleColor = sheet.colors.find((c) => c.role === 'accent')?.hex || sheet.colors.find((c) => c.role === 'primary')?.hex;
+
   return (
-    <div style={{ border: '1px solid var(--border)', borderRadius: 16, padding: 24, display: 'flex', flexDirection: 'column', gap: 20, marginBottom: 48 }}>
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        rowGap: 14,
+        columnGap: 28,
+        paddingBottom: 20,
+        marginBottom: 48,
+        borderBottom: `2px solid ${ruleColor || 'var(--border)'}`,
+      }}
+    >
       {sheet.colors.length > 0 && (
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 6 }}>
           {sheet.colors.slice(0, 8).map((c) => (
-            <div key={c.hex} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <span style={{ width: 72, height: 48, borderRadius: 10, border: '1px solid var(--border)', background: c.hex, display: 'block' }} title={c.role} />
-              <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 11.5, letterSpacing: '0.04em', color: 'var(--text-2)' }}>{c.hex}</span>
-            </div>
+            <span key={c.hex} title={`${c.hex} — ${c.role}`} style={{ width: 24, height: 24, borderRadius: 999, border: '1px solid rgba(20,20,26,0.08)', background: c.hex, display: 'inline-block' }} />
           ))}
         </div>
       )}
-      {sheet.typography.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: sheet.colors.length ? 20 : 0, borderTop: sheet.colors.length ? '1px solid var(--border)' : 'none' }}>
-          {sheet.typography.map((t) => (
-            <div key={t.role} style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
-              <span style={{ fontSize: 13, fontWeight: 700, textTransform: 'capitalize', width: 64, flex: 'none' }}>{t.role}</span>
-              <span style={mono()}>
-                ~{t.approxPx}px{t.styleDescription ? ` · ${t.styleDescription}` : ''}
-              </span>
-            </div>
-          ))}
-        </div>
+      {specimen && (
+        <span
+          style={{
+            fontFamily: "'Bricolage Grotesque', sans-serif",
+            fontWeight: 600,
+            fontSize: Math.min(Math.max(specimen.approxPx, 22), 52),
+            lineHeight: 1,
+            letterSpacing: '-0.02em',
+          }}
+        >
+          Aa
+        </span>
       )}
-      {Object.entries(sheet.components).some(([, v]) => v.count > 0) && (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 20, borderTop: '1px solid var(--border)' }}>
+      {sheet.typography.length > 0 && <span style={mono()}>{sheet.typography.map((t) => `${t.role} ~${t.approxPx}px`).join(' · ')}</span>}
+      {hasComponents && (
+        <span style={mono()}>
           {Object.entries(sheet.components)
             .filter(([, v]) => v.count > 0)
-            .map(([k, v]) => (
-              <span key={k} style={{ height: 28, padding: '0 12px', border: '1px solid var(--border)', borderRadius: 999, background: 'var(--surface-2)', color: 'var(--text-2)', fontSize: 13, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 6, textTransform: 'capitalize' }}>
-                {k} · {v.count}
-              </span>
-            ))}
-        </div>
-      )}
-      {!sheet.colors.length && !sheet.typography.length && !Object.values(sheet.components).some((v) => v.count > 0) && (
-        <span style={{ fontSize: 14, color: 'var(--text-3)' }}>Nothing was confidently extracted from these screens.</span>
+            .map(([k, v]) => `${k} · ${v.count}`)
+            .join('   ')}
+        </span>
       )}
     </div>
   );
+}
+
+// Cover Variants -- previously three hardcoded gradient placeholders with
+// no real data behind them at all. Now built from the same sceneTreatment()
+// + device-mockup components the Key Features frames use, plus the real
+// title and extracted palette. My own compositions for what each of the
+// three existing variant names ("Bold statement" / "Card breakdown" /
+// "Image-forward") should actually show -- not verified real-site
+// behavior, since state.cover/setCover has never driven anything beyond
+// this panel's own selection highlight. Falls back to the original flat
+// placeholders when there's no real pipeline data to build from (mock
+// path, or no color/screenshot extracted yet) rather than fabricating one.
+function CoverVariant({
+  index,
+  scene,
+  title,
+  firstImageSection,
+  deviceKind,
+  colors,
+}: {
+  index: number;
+  scene: SceneTreatment | null;
+  title: string;
+  firstImageSection: Extract<CanvasSection, { kind: 'image' }> | undefined;
+  deviceKind: DeviceFrameKind;
+  colors: DesignSystemColor[];
+}) {
+  if (!scene) {
+    const fallbackBg = index === 0 ? 'var(--violet-gradient)' : index === 1 ? '#F4F6FB' : 'linear-gradient(160deg, #BEDFD7 0%, #8FC4BA 100%)';
+    return <div style={{ width: '100%', height: '100%', background: fallbackBg }} />;
+  }
+
+  const textColor = scene.textOnDark ? '#FFFFFF' : '#14141A';
+  const displayTitle = title || 'Untitled case study';
+
+  if (index === 0) {
+    // Bold statement -- the real accent-driven scene background, the real
+    // title, no device -- the title itself is the whole composition.
+    return (
+      <div style={{ width: '100%', height: '100%', background: scene.panelBackground, display: 'flex', alignItems: 'flex-end', padding: 16 }}>
+        <span style={{ fontFamily: "'Bricolage Grotesque', sans-serif", fontWeight: 700, fontSize: 19, lineHeight: 1.15, letterSpacing: '-0.01em', color: textColor }}>{displayTitle}</span>
+      </div>
+    );
+  }
+
+  if (index === 1) {
+    // Card breakdown -- a compact "spec card": real palette dots + real
+    // title + real category, not a screenshot.
+    return (
+      <div style={{ width: '100%', height: '100%', background: scene.panelBackground, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: 14 }}>
+        {colors.length > 0 && (
+          <div style={{ display: 'flex', gap: 5 }}>
+            {colors.slice(0, 4).map((c) => (
+              <span key={c.hex} style={{ width: 13, height: 13, borderRadius: 999, border: '1px solid rgba(20,20,26,0.1)', background: c.hex, display: 'inline-block' }} />
+            ))}
+          </div>
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span style={{ fontFamily: "'Bricolage Grotesque', sans-serif", fontWeight: 700, fontSize: 13.5, color: textColor }}>{displayTitle}</span>
+          {scene.category && (
+            <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 9.5, letterSpacing: '0.04em', textTransform: 'uppercase', color: textColor, opacity: 0.65 }}>{scene.category}</span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Image-forward -- the real first approved screenshot in its real device
+  // frame, tilt allowed (this is a static thumbnail, not the interactive
+  // canvas, so there are no resize handles to keep in sync). Degrades to
+  // the original placeholder gradient if nothing's been approved yet.
+  if (firstImageSection?.file.url) {
+    return (
+      <div style={{ width: '100%', height: '100%', background: scene.panelBackground, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12 }}>
+        <div
+          style={{
+            position: 'relative',
+            width: '84%',
+            height: '84%',
+            overflow: 'hidden',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            boxShadow: scene.imageShadow,
+            transform: `rotate(${scene.tiltDeg}deg)`,
+            ...deviceFrameBoxStyle(deviceKind),
+          }}
+        >
+          <img src={firstImageSection.file.url} alt={firstImageSection.file.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <DeviceChrome kind={deviceKind} />
+        </div>
+      </div>
+    );
+  }
+  return <div style={{ width: '100%', height: '100%', background: 'linear-gradient(160deg, #BEDFD7 0%, #8FC4BA 100%)' }} />;
 }
 
 // Present's generated placeholder for a required slot with no matching
@@ -868,9 +1000,9 @@ function GeneratedSectionBlock({ label, headline, body, editorial, scene }: { la
           accent color, same as every other frame) -- the dashed border and
           "no screen uploaded" badge stay untouched so this never looks like
           a real, framed screenshot. */}
-      <div style={{ position: 'relative', marginBottom: 24, height: 200, border: '1.5px dashed var(--border)', borderRadius: 10, background: scene.panelBackground, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, gridRow: editorial ? 'span 2' : 'auto' }}>
-        <i className="ph ph-image-square" style={{ fontSize: 28, color: 'var(--text-3)' }} />
-        <span style={{ height: 22, padding: '0 10px', borderRadius: 999, background: 'var(--violet-gradient)', color: '#FFFFFF', fontFamily: "'Geist Mono', monospace", fontSize: 11, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+      <div style={{ position: 'relative', marginBottom: 24, height: 200, border: '1.5px dashed var(--border)', borderRadius: 10, background: scene.panelBackground, overflow: 'hidden', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, gridRow: editorial ? 'span 2' : 'auto' }}>
+        <GeneratedFrameArt accentHex={scene.accentHex} />
+        <span style={{ position: 'relative', height: 22, padding: '0 10px', borderRadius: 999, background: 'var(--violet-gradient)', color: '#FFFFFF', fontFamily: "'Geist Mono', monospace", fontSize: 11, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
           <i className="ph-fill ph-sparkle" style={{ fontSize: 11 }} />
           AI-generated — no {label.toLowerCase()} screen uploaded
         </span>
@@ -897,6 +1029,7 @@ function RealImageSectionBlock({
   sel,
   resizer,
   scene,
+  deviceKind,
 }: {
   id: string;
   fileUrl?: string;
@@ -910,6 +1043,7 @@ function RealImageSectionBlock({
   sel: string | null;
   resizer: (id: string, dx: number, dy: number) => (e: ReactPointerEvent) => void;
   scene: SceneTreatment;
+  deviceKind: DeviceFrameKind;
 }) {
   const sz = actions.sizeOf(id);
   const hovered = state.hover === id;
@@ -950,6 +1084,7 @@ function RealImageSectionBlock({
               overflow: 'hidden',
               boxShadow: scene.imageShadow,
               filter: `brightness(${state.adjB}%) contrast(${state.adjC}%) saturate(${state.adjS}%)`,
+              ...deviceFrameBoxStyle(deviceKind),
             }}
           >
             {fileUrl && <img src={fileUrl} alt={fileName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
@@ -959,6 +1094,7 @@ function RealImageSectionBlock({
                 style={{ position: 'absolute', inset: 0, background: 'linear-gradient(160deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0) 42%)', pointerEvents: 'none' }}
               />
             )}
+            <DeviceChrome kind={deviceKind} />
           </div>
 
           {selImg && (

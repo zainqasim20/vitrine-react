@@ -42,6 +42,11 @@ export interface SceneTreatment {
   tiltDeg: number;
   glossy: boolean;
   padding: number;
+  // Whether panelBackground reads dark enough that overlay text needs to be
+  // light -- used by Cover Variants' text-on-scene compositions. A per-
+  // recipe flag rather than parsing the CSS string (some recipes are
+  // gradients) at render time.
+  textOnDark: boolean;
 }
 
 export type ScreenStatus = 'pending' | 'loading' | 'drafted' | 'error' | 'skipped' | 'approved';

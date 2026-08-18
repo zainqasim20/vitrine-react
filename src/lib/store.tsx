@@ -10,7 +10,7 @@ import { draftCaption } from './pipeline/draft';
 import { narrateCaseStudy } from './pipeline/narrate';
 import categorySignals from './pipeline/config/category-signals.json';
 import moduleSequences from './pipeline/config/module-sequences.json';
-import type { ApprovedSection, CategorySignalsConfig, DesignSystemSheet, ModuleSequencesConfig, PresentFrame } from './pipeline/types';
+import type { ApprovedSection, CategorySignalsConfig, DesignSystemColor, DesignSystemSheet, ModuleSequencesConfig, PresentFrame } from './pipeline/types';
 import type { Caption, CanvasSection, ClientStatus, ProjectRecord, ProjectSnapshot, SceneTreatment, StockPhotoEntry } from './types';
 
 const PIPELINE_CONFIG = categorySignals as unknown as CategorySignalsConfig;
@@ -77,6 +77,52 @@ function hexToRgba(hex: string, alpha: number): string {
   const b = parseInt(full.slice(4, 6), 16);
   if ([r, g, b].some((n) => Number.isNaN(n))) return `rgba(122, 71, 245, ${alpha})`;
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function hexToRgb01(hex: string): [number, number, number] | null {
+  const clean = hex.replace('#', '');
+  const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  if ([r, g, b].some((n) => Number.isNaN(n))) return null;
+  return [r / 255, g / 255, b / 255];
+}
+
+// Perceived-brightness approximation (not full sRGB-linearized relative
+// luminance -- close enough for a "is this near-black" threshold check).
+function hexLuminance(hex: string): number {
+  const rgb = hexToRgb01(hex);
+  if (!rgb) return 0.5;
+  const [r, g, b] = rgb;
+  return 0.299 * r + 0.587 * g + 0.114 * b;
+}
+
+function hexSaturation(hex: string): number {
+  const rgb = hexToRgb01(hex);
+  if (!rgb) return 0;
+  const [r, g, b] = rgb;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  if (max === min) return 0;
+  const l = (max + min) / 2;
+  const d = max - min;
+  return l > 0.5 ? d / (2 - max - min) : d / (max + min);
+}
+
+// My own heuristic, used by sceneTreatment() -- not literal doc content.
+// A near-black extracted background plus a distinct, saturated accent
+// color (e.g. dark + gold) reads as "premium dark" regardless of which
+// coarse category Classify picked -- an automotive/luxury brand classified
+// as generic web-ui should still get dramatic staging because the real
+// extracted palette earns it, not because the category name says so. Only
+// fires on real extracted colors; never guesses a mood from category alone.
+function isPremiumDarkPalette(colors: DesignSystemColor[]): boolean {
+  const bg = colors.find((c) => c.role === 'background');
+  if (!bg || hexLuminance(bg.hex) > 0.15) return false;
+  const accent = colors.find((c) => c.role === 'accent') || colors.find((c) => c.role === 'primary');
+  if (!accent) return false;
+  return hexSaturation(accent.hex) > 0.25 && hexLuminance(accent.hex) > 0.15;
 }
 
 // Ported unchanged from the live site's designSystemSheetToMarkdown, used by
@@ -1601,10 +1647,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!accent) {
       // No real color extracted -- degrade to the plain, pre-existing
       // treatment rather than fabricate a color.
-      return { category, accentHex: null, panelBackground: 'var(--surface-2)', imageShadow: '0 8px 20px rgba(20,20,26,0.08)', tiltDeg: 0, glossy: false, padding: PADDING };
+      return { category, accentHex: null, panelBackground: 'var(--surface-2)', imageShadow: '0 8px 20px rgba(20,20,26,0.08)', tiltDeg: 0, glossy: false, padding: PADDING, textOnDark: false };
     }
 
     const tint = (alpha: number) => hexToRgba(accent.hex, alpha);
+    const darkGlowRecipe = (): SceneTreatment => ({
+      category,
+      accentHex: accent.hex,
+      panelBackground: `linear-gradient(160deg, ${tint(0.9)} 0%, #14141A 100%)`,
+      imageShadow: `0 0 50px ${tint(0.28)}, 0 20px 40px rgba(0,0,0,0.28)`,
+      tiltDeg: -4,
+      glossy: true,
+      padding: PADDING,
+      textOnDark: true,
+    });
+
+    // Color-driven escalation, checked before the category switch below --
+    // see isPremiumDarkPalette()'s comment. Illustration is the one
+    // exception: the doc is explicit that category gets no staging no
+    // matter what the palette looks like, so it's checked first and
+    // skips this override entirely.
+    if (category !== 'illustration' && isPremiumDarkPalette(colors)) {
+      return darkGlowRecipe();
+    }
 
     switch (category) {
       case 'mobile-app':
@@ -1612,41 +1677,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // flat/even lighting; Part 3's deviation note says bright
         // saturated flat colors real-confirmed to outperform "safe" dark
         // defaults here.
-        return { category, accentHex: accent.hex, panelBackground: accent.hex, imageShadow: `0 0 0 1px ${tint(0.18)}, 0 14px 28px rgba(20,20,26,0.16)`, tiltDeg: 5, glossy: true, padding: PADDING };
+        return { category, accentHex: accent.hex, panelBackground: accent.hex, imageShadow: `0 0 0 1px ${tint(0.18)}, 0 14px 28px rgba(20,20,26,0.16)`, tiltDeg: 5, glossy: true, padding: PADDING, textOnDark: true };
       case 'product-design':
         // my nearest analog: doc has no Product Design row -- closest is
         // Packaging (flat studio, sharp specular highlight).
-        return { category, accentHex: accent.hex, panelBackground: 'var(--surface-2)', imageShadow: '0 8px 16px rgba(20,20,26,0.18)', tiltDeg: 0, glossy: true, padding: PADDING };
+        return { category, accentHex: accent.hex, panelBackground: 'var(--surface-2)', imageShadow: '0 8px 16px rgba(20,20,26,0.18)', tiltDeg: 0, glossy: true, padding: PADDING, textOnDark: false };
       case 'branding':
         // doc: Brand Identity/Logo -- flat brand color, flat lighting.
-        return { category, accentHex: accent.hex, panelBackground: tint(0.35), imageShadow: '0 6px 14px rgba(20,20,26,0.10)', tiltDeg: 0, glossy: false, padding: PADDING };
+        return { category, accentHex: accent.hex, panelBackground: tint(0.35), imageShadow: '0 6px 14px rgba(20,20,26,0.10)', tiltDeg: 0, glossy: false, padding: PADDING, textOnDark: false };
       case 'architecture':
         // my nearest analog: doc has no Architecture row -- closest is
-        // 3D/CGI (dramatic environment, cinematic light).
-        return {
-          category,
-          accentHex: accent.hex,
-          panelBackground: `linear-gradient(160deg, ${tint(0.9)} 0%, #14141A 100%)`,
-          imageShadow: `0 0 50px ${tint(0.28)}, 0 20px 40px rgba(0,0,0,0.28)`,
-          tiltDeg: -4,
-          glossy: true,
-          padding: PADDING,
-        };
+        // 3D/CGI (dramatic environment, cinematic light). Same recipe the
+        // color-driven escalation above reaches for.
+        return darkGlowRecipe();
       case 'illustration':
         // doc is explicit here: "the art itself carries all mood; no
         // external scene-staging applies" -- left at the plain,
         // pre-existing treatment on purpose, not upgraded.
-        return { category, accentHex: accent.hex, panelBackground: 'var(--surface-2)', imageShadow: '0 8px 20px rgba(20,20,26,0.08)', tiltDeg: 0, glossy: false, padding: PADDING };
+        return { category, accentHex: accent.hex, panelBackground: 'var(--surface-2)', imageShadow: '0 8px 20px rgba(20,20,26,0.08)', tiltDeg: 0, glossy: false, padding: PADDING, textOnDark: false };
       case 'graphic-design':
         // my own extension -- doc has no Graphic Design row; treated like
         // Illustration's unstaged default.
-        return { category, accentHex: accent.hex, panelBackground: 'var(--surface-2)', imageShadow: '0 8px 20px rgba(20,20,26,0.10)', tiltDeg: 0, glossy: false, padding: PADDING };
+        return { category, accentHex: accent.hex, panelBackground: 'var(--surface-2)', imageShadow: '0 8px 20px rgba(20,20,26,0.10)', tiltDeg: 0, glossy: false, padding: PADDING, textOnDark: false };
       case 'web-ui':
       default:
         // doc splits "Website" by vertical (AI/SaaS vs healthcare/real
         // estate) real Classify can't detect -- defaulting to the calmer,
         // non-dramatic row rather than guessing a vertical.
-        return { category, accentHex: accent.hex, panelBackground: tint(0.12), imageShadow: '0 12px 32px rgba(20,20,26,0.10)', tiltDeg: 0, glossy: false, padding: PADDING };
+        return { category, accentHex: accent.hex, panelBackground: tint(0.12), imageShadow: '0 12px 32px rgba(20,20,26,0.10)', tiltDeg: 0, glossy: false, padding: PADDING, textOnDark: false };
     }
   }, [currentCategoryId]);
 

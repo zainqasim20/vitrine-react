@@ -2,7 +2,10 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../lib/store';
 import type { CanvasSection, SceneTreatment } from '../lib/types';
+import type { ImageFeatureRecord } from '../lib/pipeline/types';
 import { NarrationIntro } from '../components/NarrationIntro';
+import { deviceFrameBoxStyle, deviceFrameKindFor, DeviceChrome } from '../components/DeviceFrame';
+import { GeneratedFrameArt } from '../components/GeneratedFrameArt';
 
 // Real, public case-study preview -- ported from the live site's
 // renderPreview()/renderPreviewSection() family. Reads the same
@@ -159,7 +162,7 @@ export function Preview() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 64 }}>
           {sections.map((sec) => (
             <RevealItem key={sec.id} enabled={state.reveal} amount={state.revealAmt}>
-              <PreviewSectionBlock sec={sec} layout={layout} theme={theme} imgFx={state.imgFx} scene={scene} />
+              <PreviewSectionBlock sec={sec} layout={layout} theme={theme} imgFx={state.imgFx} scene={scene} perceiveRecords={state.pipeline.perceiveRecords} />
             </RevealItem>
           ))}
         </div>
@@ -285,12 +288,14 @@ function PreviewSectionBlock({
   theme,
   imgFx,
   scene,
+  perceiveRecords,
 }: {
   sec: CanvasSection;
   layout: 'stacked' | 'side-by-side' | 'compact';
   theme: (typeof THEMES)[number];
   imgFx: string;
   scene: SceneTreatment;
+  perceiveRecords: Record<string, ImageFeatureRecord>;
 }) {
   if (sec.kind === 'design-system') return <DesignSystemPreviewBlock sec={sec} />;
   if (sec.kind === 'generated') return <GeneratedPreviewBlock sec={sec} theme={theme} scene={scene} />;
@@ -299,6 +304,7 @@ function PreviewSectionBlock({
   const hoverTransform = imgFx === 'Zoom' && hovered ? 'scale(1.03)' : imgFx === 'Lift' && hovered ? 'translateY(-4px)' : 'none';
   const imageFirst = layout !== 'side-by-side';
   const row = layout === 'side-by-side' || layout === 'compact';
+  const deviceKind = deviceFrameKindFor(perceiveRecords[sec.file.id]);
   // Scene Construction Framework's Surface (panel background) and
   // Composition (negative space) layers wrap the real screenshot; Angle
   // (tiltDeg) and Lighting (imageShadow) apply to the framed box itself.
@@ -320,6 +326,7 @@ function PreviewSectionBlock({
           border: '1px solid var(--border)',
           boxShadow: scene.imageShadow,
           transform: `rotate(${scene.tiltDeg}deg)`,
+          ...deviceFrameBoxStyle(deviceKind),
         }}
       >
         {sec.file.url && (
@@ -335,6 +342,7 @@ function PreviewSectionBlock({
             style={{ position: 'absolute', inset: 0, background: 'linear-gradient(160deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0) 42%)', pointerEvents: 'none' }}
           />
         )}
+        <DeviceChrome kind={deviceKind} />
       </div>
     </div>
   );
@@ -364,29 +372,31 @@ function PreviewSectionBlock({
 
 // Design-system section: colors + components only, matching the live
 // site's renderDesignSystemPreviewSection() exactly (no typography row).
+// Redesigned from a bordered spec-sheet box into a slim strip -- same real
+// data and same real-site scope, just laid out as an integrated band with
+// a thin real-accent rule instead of a box border (same treatment as
+// Refine's RealDesignSystemBlock).
 function DesignSystemPreviewBlock({ sec }: { sec: Extract<CanvasSection, { kind: 'design-system' }> }) {
   const { content } = sec;
   const hasComponents = Object.entries(content.components).some(([, v]) => v.count > 0);
+  const ruleColor = content.colors.find((c) => c.role === 'accent')?.hex || content.colors.find((c) => c.role === 'primary')?.hex;
   return (
-    <div style={{ border: '1px solid var(--border)', borderRadius: 16, padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', rowGap: 12, columnGap: 20, paddingBottom: 18, borderBottom: `2px solid ${ruleColor || 'var(--border)'}` }}>
       <span style={mono()}>Extracted, not inferred</span>
       {content.colors.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 6 }}>
           {content.colors.slice(0, 8).map((c) => (
-            <span key={c.hex} title={`${c.hex} — ${c.role}`} style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid var(--border)', background: c.hex }} />
+            <span key={c.hex} title={`${c.hex} — ${c.role}`} style={{ width: 22, height: 22, borderRadius: 999, border: '1px solid rgba(20,20,26,0.08)', background: c.hex, display: 'inline-block' }} />
           ))}
         </div>
       )}
       {hasComponents && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        <span style={mono()}>
           {Object.entries(content.components)
             .filter(([, v]) => v.count > 0)
-            .map(([k, v]) => (
-              <span key={k} style={{ height: 26, padding: '0 10px', borderRadius: 999, background: 'var(--surface-2)', color: 'var(--text-2)', fontSize: 12, fontWeight: 600, display: 'inline-flex', alignItems: 'center', textTransform: 'capitalize' }}>
-                {k} · {v.count}
-              </span>
-            ))}
-        </div>
+            .map(([k, v]) => `${k} · ${v.count}`)
+            .join('   ')}
+        </span>
       )}
     </div>
   );
@@ -397,9 +407,9 @@ function GeneratedPreviewBlock({ sec, theme, scene }: { sec: Extract<CanvasSecti
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {/* Surface/color-grade layer only, same reasoning as Refine's
           GeneratedSectionBlock -- no real screenshot to stage. */}
-      <div style={{ height: 220, borderRadius: 12, border: '1.5px dashed var(--border)', background: scene.panelBackground, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-        <i className="ph ph-image-square" style={{ fontSize: 26, color: 'var(--text-3)' }} />
-        <span style={{ height: 22, padding: '0 10px', borderRadius: 999, background: theme.accent, color: '#FFFFFF', fontFamily: "'Geist Mono', monospace", fontSize: 11, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+      <div style={{ position: 'relative', height: 220, borderRadius: 12, border: '1.5px dashed var(--border)', background: scene.panelBackground, overflow: 'hidden', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+        <GeneratedFrameArt accentHex={scene.accentHex} />
+        <span style={{ position: 'relative', height: 22, padding: '0 10px', borderRadius: 999, background: theme.accent, color: '#FFFFFF', fontFamily: "'Geist Mono', monospace", fontSize: 11, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
           <i className="ph-fill ph-sparkle" style={{ fontSize: 11 }} />
           AI-generated
         </span>

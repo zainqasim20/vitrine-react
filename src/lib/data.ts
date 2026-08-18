@@ -67,6 +67,20 @@ export const TEMPLATES: TemplateDef[] = [
   { name: 'Single Screen Deep-Dive', desc: 'One screen, annotated closely', kind: 'deepdive', cat: 'Editorial', theme: 'editorial', layout: 'stacked' },
 ];
 
+// Real Pexels search query per template kind -- ported from the live site's
+// TEMPLATE_QUERY map, used to fetch a representative sample photo for each
+// template card in the gallery.
+export const TEMPLATE_QUERY: Record<TemplateDef['kind'], string> = {
+  grid: 'modern app dashboard interface',
+  story: 'mobile app onboarding screen',
+  split: 'before after comparison design',
+  metrics: 'analytics dashboard charts',
+  editorial: 'magazine layout typography',
+  timeline: 'workflow process diagram',
+  visual: 'full screen mobile app photography',
+  deepdive: 'close up interface design detail',
+};
+
 export const HOW_STEPS = [
   { num: '01 Upload', title: 'Drop the screens', body: 'Exports, recordings, stills — in the order the flow runs. No brief, no form to fill in.' },
   { num: '02 Draft', title: 'Review one at a time', body: 'A section is written per screen. Approve, regenerate, or skip it. Nothing enters the case study without a decision.' },

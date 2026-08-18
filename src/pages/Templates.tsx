@@ -1,12 +1,20 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useApp } from '../lib/store';
-import { TEMPLATE_CATEGORIES, TEMPLATES } from '../lib/data';
+import { TEMPLATE_CATEGORIES, TEMPLATES, TEMPLATE_QUERY } from '../lib/data';
 import { TemplateThumb } from '../components/TemplateThumb';
 
 export function Templates() {
   const { state, actions } = useApp();
   const [hover, setHover] = useState<string | null>(null);
   const filtered = state.templateFilter === 'All' ? TEMPLATES : TEMPLATES.filter((t) => t.cat === state.templateFilter);
+
+  // Real Pexels fetch, triggered per visible template's query -- mirrors the
+  // live site's render()-triggers-a-fetch getStockPhoto() model, adapted to
+  // React (which can't fetch during render itself).
+  useEffect(() => {
+    filtered.forEach((t) => actions.fetchStockPhoto(TEMPLATE_QUERY[t.kind]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.templateFilter, state.apiStatus.checked, state.apiStatus.pexels]);
 
   return (
     <>
@@ -41,16 +49,36 @@ export function Templates() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 20 }}>
-        {filtered.map((t) => (
+        {filtered.map((t) => {
+          const query = TEMPLATE_QUERY[t.kind];
+          const stock = actions.getStockPhoto(query);
+          const isReady = stock.status === 'ready';
+          const tagTitle =
+            stock.status === 'unavailable'
+              ? 'Live photos need a Pexels key'
+              : stock.status === 'error'
+                ? 'Sample photo unavailable right now'
+                : isReady
+                  ? `Photo: ${stock.photo.photographer} / Pexels`
+                  : 'Loading sample photo…';
+          return (
           <div key={t.name} style={{ border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden', background: 'var(--surface)' }}>
             <div
               onMouseEnter={() => setHover(t.name)}
               onMouseLeave={() => setHover(null)}
-              style={{ position: 'relative', aspectRatio: '4 / 3', borderBottom: '1px solid var(--border)', background: 'var(--surface)', padding: 20 }}
+              style={{ position: 'relative', aspectRatio: '4 / 3', borderBottom: '1px solid var(--border)', background: 'var(--surface)', padding: isReady ? 0 : 20 }}
             >
-              <TemplateThumb kind={t.kind} />
+              {isReady ? (
+                <img
+                  src={stock.photo.thumb}
+                  alt={stock.photo.alt || t.name}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+              ) : (
+                <TemplateThumb kind={t.kind} />
+              )}
               <span
-                title="Live photos need a Pexels key"
+                title={tagTitle}
                 style={{
                   position: 'absolute',
                   right: 10,
@@ -107,7 +135,8 @@ export function Templates() {
               <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 11, letterSpacing: '0.03em', color: 'var(--text-3)' }}>{t.desc}</span>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </>
   );

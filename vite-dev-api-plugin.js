@@ -43,6 +43,7 @@ export default function viteDevApiPlugin() {
     '/api/perceive-image': new URL('./api/perceive-image.js', import.meta.url),
     '/api/analyze-image': new URL('./api/analyze-image.js', import.meta.url),
     '/api/narrate-case-study': new URL('./api/narrate-case-study.js', import.meta.url),
+    '/api/pexels-search': new URL('./api/pexels-search.js', import.meta.url),
   };
 
   return {

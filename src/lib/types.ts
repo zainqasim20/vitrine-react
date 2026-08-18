@@ -10,6 +10,22 @@ export type CanvasSection =
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
+// Real Pexels photo shape returned by /api/pexels-search, ported unchanged
+// from the live site's response mapping.
+export interface PexelsPhoto {
+  id: number;
+  src: string;
+  thumb: string;
+  width: number;
+  height: number;
+  photographer: string;
+  photographerUrl: string;
+  pageUrl: string;
+  alt: string;
+}
+
+export type StockPhotoEntry = { status: 'loading' } | { status: 'unavailable' } | { status: 'ready'; photo: PexelsPhoto } | { status: 'error'; message: string };
+
 export type ScreenStatus = 'pending' | 'loading' | 'drafted' | 'error' | 'skipped' | 'approved';
 
 export interface UploadedFile {
@@ -180,8 +196,15 @@ export interface AppState {
   // Real backend availability, fetched from /api/status on load -- never
   // assumed. Matches the live site's apiStatus gate exactly: real-pipeline
   // behavior only runs when apiStatus.gemini is true; otherwise the app
-  // falls through to the pre-pipeline flow unchanged.
-  apiStatus: { gemini: boolean; checked: boolean };
+  // falls through to the pre-pipeline flow unchanged. pexels gates the
+  // Templates gallery's real stock photos the same way.
+  apiStatus: { gemini: boolean; pexels: boolean; checked: boolean };
+
+  // Real stock photos for the Templates gallery, fetched live from Pexels
+  // through /api/pexels-search -- cached per query so re-filtering doesn't
+  // refetch. Never presented as anything but a sample (tagged + credited),
+  // so it's never confused with a user's real upload.
+  stockCache: Record<string, StockPhotoEntry>;
 
   // AI pipeline (docs/ai-system-prompt.md Stages 1-2: Perceive/Classify,
   // plus Stage 2's Fallback question so far). Keyed by file id rather than

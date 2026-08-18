@@ -11,7 +11,7 @@ import { narrateCaseStudy } from './pipeline/narrate';
 import categorySignals from './pipeline/config/category-signals.json';
 import moduleSequences from './pipeline/config/module-sequences.json';
 import type { ApprovedSection, CategorySignalsConfig, DesignSystemSheet, ModuleSequencesConfig, PresentFrame } from './pipeline/types';
-import type { Caption, CanvasSection, ClientStatus, ProjectRecord, ProjectSnapshot } from './types';
+import type { Caption, CanvasSection, ClientStatus, ProjectRecord, ProjectSnapshot, StockPhotoEntry } from './types';
 
 const PIPELINE_CONFIG = categorySignals as unknown as CategorySignalsConfig;
 const MODULE_SEQUENCES = moduleSequences as unknown as ModuleSequencesConfig;
@@ -215,7 +215,8 @@ const initialState: AppState = {
   draftStatus: {},
   draftError: {},
 
-  apiStatus: { gemini: false, checked: false },
+  apiStatus: { gemini: false, pexels: false, checked: false },
+  stockCache: {},
   pipeline: {
     perceiveRecords: {},
     perceiveStatus: {},
@@ -450,6 +451,8 @@ export interface AppActions {
   logout: () => void;
   setTemplateFilter: (v: string) => void;
   useTemplate: (name: string) => void;
+  getStockPhoto: (query: string) => StockPhotoEntry;
+  fetchStockPhoto: (query: string) => void;
 }
 
 interface Ctx {
@@ -511,11 +514,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     fetch('/api/status')
       .then((r) => r.json())
-      .then((data: { gemini?: boolean }) => {
-        patch({ apiStatus: { gemini: !!data.gemini, checked: true } });
+      .then((data: { gemini?: boolean; pexels?: boolean }) => {
+        patch({ apiStatus: { gemini: !!data.gemini, pexels: !!data.pexels, checked: true } });
       })
       .catch(() => {
-        patch({ apiStatus: { gemini: false, checked: true } });
+        patch({ apiStatus: { gemini: false, pexels: false, checked: true } });
       });
   }, [patch]);
 
@@ -1520,6 +1523,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [patch, say, navigate],
   );
 
+  // Real stock photos for the Templates gallery -- ported from the live
+  // site's getStockPhoto()/renderTemplateThumb(). React can't fetch during
+  // render (unlike the live site's read-triggers-a-fetch render() model),
+  // so this splits into two: getStockPhoto() is a pure read Templates.tsx
+  // uses to decide what to show, and fetchStockPhoto() is the actual
+  // side-effecting call, triggered from a useEffect there once per query.
+  const getStockPhoto = useCallback((query: string): StockPhotoEntry => {
+    const s = stateRef.current;
+    const cached = s.stockCache[query];
+    if (cached) return cached;
+    if (!s.apiStatus.checked) return { status: 'loading' };
+    if (!s.apiStatus.pexels) return { status: 'unavailable' };
+    return { status: 'loading' };
+  }, []);
+
+  const fetchStockPhoto = useCallback(
+    (query: string) => {
+      const s = stateRef.current;
+      if (s.stockCache[query]) return;
+      if (!s.apiStatus.checked || !s.apiStatus.pexels) return;
+      patch((st) => ({ stockCache: { ...st.stockCache, [query]: { status: 'loading' } } }));
+      fetch(`/api/pexels-search?query=${encodeURIComponent(query)}&perPage=1`)
+        .then((r) => r.json())
+        .then((data: { photos?: import('./types').PexelsPhoto[]; error?: string }) => {
+          const entry: StockPhotoEntry =
+            data.error || !data.photos || !data.photos.length ? { status: 'error', message: data.error || 'No results' } : { status: 'ready', photo: data.photos[0] };
+          patch((st) => ({ stockCache: { ...st.stockCache, [query]: entry } }));
+        })
+        .catch((e: Error) => {
+          patch((st) => ({ stockCache: { ...st.stockCache, [query]: { status: 'error', message: e.message } } }));
+        });
+    },
+    [patch],
+  );
+
   const goRefine = useCallback(() => {
     if (!approvedIndices().length) {
       say('Approve a section first');
@@ -1971,6 +2009,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     logout,
     setTemplateFilter,
     useTemplate,
+    getStockPhoto,
+    fetchStockPhoto,
   };
 
   return <AppContext.Provider value={{ state, actions }}>{children}</AppContext.Provider>;

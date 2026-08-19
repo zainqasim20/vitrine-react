@@ -3,7 +3,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../lib/store';
 import { Logo } from '../components/Logo';
 import { FreeformCanvas } from '../components/customize/FreeformCanvas';
-import type { FreeformElement, FreeformElementType, FreeformPage } from '../lib/templates/freeform-types';
+import type { FreeformElement, FreeformElementType, FreeformGradient, FreeformPage } from '../lib/templates/freeform-types';
+import { buildFreeformGradientCss, FREEFORM_VIBRANT_PRESETS, parseFreeformGradient } from '../lib/templates/freeform-types';
+import { FONT_CATEGORY_LABELS, GOOGLE_FONTS, loadGoogleFont, resolveFreeformFontCss, type GoogleFontCategory } from '../lib/templates/google-fonts';
 
 function mono(): React.CSSProperties {
   return { fontFamily: "'Geist Mono', monospace", fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--text-3)' };
@@ -27,67 +29,249 @@ function IconBtn({ icon, title, onClick, danger, disabled }: { icon: string; tit
   );
 }
 
-const GRADIENT_RE = /^linear-gradient\(\s*(-?\d+)deg\s*,\s*(#[0-9a-fA-F]{6})\s*,\s*(#[0-9a-fA-F]{6})\s*\)$/;
-
-function parseGradient(value: string): { angle: number; from: string; to: string } | null {
-  const m = GRADIENT_RE.exec(value.trim());
-  if (!m) return null;
-  return { angle: Number(m[1]), from: m[2], to: m[3] };
+function tabBtnStyle(active: boolean): React.CSSProperties {
+  return { flex: 1, height: 28, border: `1px solid ${active ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 8, background: active ? 'var(--violet-light)' : 'transparent', color: active ? 'var(--violet-deep)' : 'var(--text-2)', fontSize: 11.5, fontWeight: 700, textTransform: 'capitalize', cursor: 'pointer' };
 }
 
-// Solid color OR a 2-stop linear gradient, written into the exact same
-// field either way -- background/fill are already plain CSS `background`
-// values (freeform-types.ts never modeled color as its own type), so a
-// gradient is just a linear-gradient() string in that same slot, no data
-// model change needed.
+function isGradientCss(v: string): boolean {
+  return /^(linear|radial|conic)-gradient\(/.test(v);
+}
+
+// Linear/radial/conic, any number of stops, built from freeform-types.ts's
+// canonical gradient string format (buildFreeformGradientCss /
+// parseFreeformGradient) -- editing here always round-trips through that
+// same real CSS string, no separate gradient data type stored anywhere.
+function GradientEditor({ value, onChange }: { value: string; onChange: (css: string) => void }) {
+  const g: FreeformGradient = parseFreeformGradient(value) ?? { type: 'linear', angle: 135, stops: [{ color: '#6038EE', position: 0 }, { color: '#AD5BFC', position: 100 }] };
+
+  function update(next: FreeformGradient) {
+    onChange(buildFreeformGradientCss(next));
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', gap: 4 }}>
+        {(['linear', 'radial', 'conic'] as const).map((t) => (
+          <button key={t} type="button" onClick={() => update({ ...g, type: t })} style={tabBtnStyle(g.type === t)}>
+            {t}
+          </button>
+        ))}
+      </div>
+      <div style={{ height: 56, borderRadius: 8, border: '1px solid var(--border)', background: buildFreeformGradientCss(g) }} />
+      {g.type !== 'radial' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={mono()}>Angle</span>
+          <input type="range" min={0} max={360} value={g.angle} onChange={(e) => update({ ...g, angle: Number(e.target.value) })} style={{ flex: 1, accentColor: 'var(--violet)' }} />
+          <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 11, color: 'var(--text-2)', width: 32, textAlign: 'right' }}>{g.angle}°</span>
+        </div>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <span style={mono()}>Stops</span>
+        {g.stops.map((s, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="color" value={s.color} onChange={(e) => update({ ...g, stops: g.stops.map((st, j) => (j === i ? { ...st, color: e.target.value } : st)) })} style={{ width: 28, height: 28, padding: 0, border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', background: 'none', flex: 'none' }} />
+            <input type="range" min={0} max={100} value={s.position} onChange={(e) => update({ ...g, stops: g.stops.map((st, j) => (j === i ? { ...st, position: Number(e.target.value) } : st)) })} style={{ flex: 1, accentColor: 'var(--violet)' }} />
+            <span style={{ fontSize: 10.5, fontFamily: "'Geist Mono', monospace", color: 'var(--text-3)', width: 30, textAlign: 'right', flex: 'none' }}>{s.position}%</span>
+            {g.stops.length > 2 && <IconBtn icon="ph ph-x" title="Remove stop" onClick={() => update({ ...g, stops: g.stops.filter((_, j) => j !== i) })} />}
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() => update({ ...g, stops: [...g.stops, { color: '#FFFFFF', position: Math.min(100, (g.stops[g.stops.length - 1]?.position ?? 50) + 10) }] })}
+          style={{ height: 28, border: '1px dashed var(--border-strong)', borderRadius: 8, background: 'transparent', color: 'var(--text-2)', fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}
+        >
+          + Add stop
+        </button>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {/* Real, valid CSS -- several soft radial gradients layered on one
+            background (natively supported, comma-separated background
+            layers), not a fabricated "mesh" primitive. One-click apply;
+            not re-editable as stops afterward since it's several gradients
+            at once, not this editor's single-gradient model. */}
+        <span style={mono()}>Vibrant presets</span>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+          {FREEFORM_VIBRANT_PRESETS.map((p) => (
+            <button key={p.name} type="button" title={p.name} onClick={() => onChange(p.css)} style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', background: p.css, cursor: 'pointer', padding: 0 }} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// A Figma-style swatch: click opens a floating popover with Solid/Gradient
+// tabs on top, closing on outside click. Solid and gradient both write
+// into the exact same field (a plain CSS `background`-compatible string --
+// freeform-types.ts never modeled color as its own type), so nothing else
+// needs to know which mode produced the value.
 function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (css: string) => void }) {
-  const gradient = parseGradient(value);
-  const safeSolid = !gradient && /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#000000';
+  const [open, setOpen] = useState(false);
+  const isGrad = isGradientCss(value);
+  const safeSolid = !isGrad && /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#000000';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={mono()}>{label}</span>
-        <div style={{ display: 'flex', gap: 4 }}>
-          <button
-            type="button"
-            onClick={() => !gradient || onChange(gradient.from)}
-            style={{ height: 22, padding: '0 8px', border: `1px solid ${!gradient ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 999, background: !gradient ? 'var(--violet-light)' : 'transparent', color: !gradient ? 'var(--violet-deep)' : 'var(--text-3)', fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}
-          >
-            Solid
-          </button>
-          <button
-            type="button"
-            onClick={() => gradient || onChange(`linear-gradient(135deg, ${safeSolid}, #7A47F5)`)}
-            style={{ height: 22, padding: '0 8px', border: `1px solid ${gradient ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 999, background: gradient ? 'var(--violet-light)' : 'transparent', color: gradient ? 'var(--violet-deep)' : 'var(--text-3)', fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}
-          >
-            Gradient
-          </button>
-        </div>
-      </div>
+      <span style={mono()}>{label}</span>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, height: 36, border: '1px solid var(--border)', borderRadius: 8, padding: '0 8px', background: 'transparent', cursor: 'pointer' }}
+      >
+        <span style={{ width: 22, height: 22, borderRadius: 6, border: '1px solid var(--border)', background: value, flex: 'none' }} />
+        <span style={{ flex: 1, textAlign: 'left', fontSize: 11.5, fontFamily: "'Geist Mono', monospace", color: 'var(--text-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {isGrad ? 'Gradient' : value}
+        </span>
+        <i className="ph ph-caret-down" style={{ fontSize: 12, color: 'var(--text-3)' }} />
+      </button>
 
-      {gradient ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input type="color" value={gradient.from} onChange={(e) => onChange(`linear-gradient(${gradient.angle}deg, ${e.target.value}, ${gradient.to})`)} style={{ width: 32, height: 32, padding: 0, border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', background: 'none' }} />
-            <input type="color" value={gradient.to} onChange={(e) => onChange(`linear-gradient(${gradient.angle}deg, ${gradient.from}, ${e.target.value})`)} style={{ width: 32, height: 32, padding: 0, border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', background: 'none' }} />
-            <div style={{ flex: 1, borderRadius: 8, border: '1px solid var(--border)', background: value }} />
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 100 }} />
+          <div style={{ position: 'fixed', top: 70, right: 16, width: 300, maxHeight: '80vh', overflowY: 'auto', zIndex: 101, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, boxShadow: 'var(--shadow-lg)', padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 13, fontWeight: 700 }}>{label}</span>
+              <IconBtn icon="ph ph-x" title="Close" onClick={() => setOpen(false)} />
+            </div>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button type="button" onClick={() => isGrad && onChange(parseFreeformGradient(value)?.stops[0]?.color ?? '#000000')} style={tabBtnStyle(!isGrad)}>
+                Solid
+              </button>
+              <button type="button" onClick={() => !isGrad && onChange(`linear-gradient(135deg, ${safeSolid} 0%, #7A47F5 100%)`)} style={tabBtnStyle(isGrad)}>
+                Gradient
+              </button>
+            </div>
+            {isGrad ? (
+              <GradientEditor value={value} onChange={onChange} />
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input type="color" value={safeSolid} onChange={(e) => onChange(e.target.value)} style={{ width: 36, height: 36, padding: 0, border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', background: 'none' }} />
+                <input
+                  value={value}
+                  onChange={(e) => onChange(e.target.value)}
+                  style={{ flex: 1, height: 36, border: '1px solid var(--border)', borderRadius: 8, padding: '0 10px', fontFamily: "'Geist Mono', monospace", fontSize: 12, color: 'var(--text)', background: 'transparent', outline: 'none' }}
+                />
+              </div>
+            )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={mono()}>Angle</span>
-            <input type="range" min={0} max={360} value={gradient.angle} onChange={(e) => onChange(`linear-gradient(${e.target.value}deg, ${gradient.from}, ${gradient.to})`)} style={{ flex: 1, accentColor: 'var(--violet)' }} />
-            <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 11, color: 'var(--text-2)', width: 32, textAlign: 'right' }}>{gradient.angle}°</span>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Same floating-popover shell as ColorField, but for picking a font:
+// search box + category tabs on top, a scrollable list previewing each
+// font in itself, and a free-text fallback so any valid Google Font name
+// works even if it isn't in the curated list below.
+function FontPicker({ value, onChange }: { value: string; onChange: (family: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [cat, setCat] = useState<'all' | GoogleFontCategory>('all');
+  const [previewFamily, setPreviewFamily] = useState<string | null>(null);
+
+  const filtered = GOOGLE_FONTS.filter((f) => (cat === 'all' || f.category === cat) && f.family.toLowerCase().includes(search.toLowerCase()));
+  const builtIns: { key: string; label: string }[] = [
+    { key: 'display', label: 'Bricolage Grotesque' },
+    { key: 'body', label: 'Plus Jakarta Sans' },
+    { key: 'mono', label: 'Geist Mono' },
+  ];
+  const currentLabel = builtIns.find((b) => b.key === value)?.label ?? value;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <span style={mono()}>Font</span>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        style={{ height: 36, border: '1px solid var(--border)', borderRadius: 8, padding: '0 10px', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+      >
+        <span style={{ fontFamily: resolveFreeformFontCss(value), fontSize: 13, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{currentLabel}</span>
+        <i className="ph ph-caret-down" style={{ fontSize: 12, color: 'var(--text-3)', flex: 'none' }} />
+      </button>
+
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 100 }} />
+          <div style={{ position: 'fixed', top: 70, right: 16, width: 320, maxHeight: '75vh', zIndex: 101, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, boxShadow: 'var(--shadow-lg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div style={{ padding: 12, borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 13, fontWeight: 700 }}>Font</span>
+                <IconBtn icon="ph ph-x" title="Close" onClick={() => setOpen(false)} />
+              </div>
+              <input
+                autoFocus
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search fonts…"
+                style={{ height: 34, border: '1px solid var(--border)', borderRadius: 8, padding: '0 10px', fontSize: 13, outline: 'none', background: 'transparent', color: 'var(--text)' }}
+              />
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {(['all', 'sans-serif', 'serif', 'display', 'handwriting', 'monospace'] as const).map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setCat(c)}
+                    style={{ height: 24, padding: '0 8px', borderRadius: 999, border: `1px solid ${cat === c ? 'var(--violet)' : 'var(--border)'}`, background: cat === c ? 'var(--violet-light)' : 'transparent', color: cat === c ? 'var(--violet-deep)' : 'var(--text-3)', fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    {c === 'all' ? 'All' : FONT_CATEGORY_LABELS[c]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ overflowY: 'auto', padding: 6 }}>
+              {search === '' &&
+                builtIns.map((b) => (
+                  <button
+                    key={b.key}
+                    type="button"
+                    onClick={() => {
+                      onChange(b.key);
+                      setOpen(false);
+                    }}
+                    style={{ width: '100%', textAlign: 'left', padding: '10px 10px', border: 0, background: value === b.key ? 'var(--violet-light)' : 'transparent', borderRadius: 8, cursor: 'pointer', display: 'block' }}
+                  >
+                    <div style={{ fontFamily: resolveFreeformFontCss(b.key), fontSize: 16, color: 'var(--text)' }}>{b.label}</div>
+                    <div style={{ fontSize: 10.5, color: 'var(--text-3)', fontFamily: "'Geist Mono', monospace" }}>App font</div>
+                  </button>
+                ))}
+              {filtered.map((f) => (
+                <button
+                  key={f.family}
+                  type="button"
+                  onMouseEnter={() => {
+                    setPreviewFamily(f.family);
+                    loadGoogleFont(f.family);
+                  }}
+                  onClick={() => {
+                    onChange(f.family);
+                    setOpen(false);
+                  }}
+                  style={{ width: '100%', textAlign: 'left', padding: '10px 10px', border: 0, background: value === f.family ? 'var(--violet-light)' : 'transparent', borderRadius: 8, cursor: 'pointer', display: 'block' }}
+                >
+                  <div style={{ fontFamily: previewFamily === f.family || value === f.family ? resolveFreeformFontCss(f.family) : 'inherit', fontSize: 16, color: 'var(--text)' }}>{f.family}</div>
+                  <div style={{ fontSize: 10.5, color: 'var(--text-3)', fontFamily: "'Geist Mono', monospace" }}>{FONT_CATEGORY_LABELS[f.category]}</div>
+                </button>
+              ))}
+              {filtered.length === 0 && <p style={{ padding: 12, fontSize: 12, color: 'var(--text-3)', margin: 0 }}>No matches in the curated list — type an exact Google Fonts name below to load it anyway.</p>}
+            </div>
+            <div style={{ padding: 10, borderTop: '1px solid var(--border)', display: 'flex', gap: 6 }}>
+              <input
+                placeholder="Or type any Google Font name…"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const v = e.currentTarget.value.trim();
+                    if (v) {
+                      onChange(v);
+                      setOpen(false);
+                    }
+                  }
+                }}
+                style={{ flex: 1, height: 32, border: '1px solid var(--border)', borderRadius: 8, padding: '0 8px', fontSize: 12, outline: 'none', background: 'transparent', color: 'var(--text)' }}
+              />
+            </div>
           </div>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <input type="color" value={safeSolid} onChange={(e) => onChange(e.target.value)} style={{ width: 32, height: 32, padding: 0, border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', background: 'none' }} />
-          <input
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            style={{ flex: 1, height: 32, border: '1px solid var(--border)', borderRadius: 8, padding: '0 10px', fontFamily: "'Geist Mono', monospace", fontSize: 12, color: 'var(--text)', background: 'transparent', outline: 'none' }}
-          />
-        </div>
+        </>
       )}
     </div>
   );
@@ -197,6 +381,7 @@ export function Customize() {
   const navigate = useNavigate();
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [renamingPageId, setRenamingPageId] = useState<string | null>(null);
+  const [renamingLayerId, setRenamingLayerId] = useState<string | null>(null);
   const mainRef = useRef<HTMLElement>(null);
   const pageRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -458,7 +643,8 @@ export function Customize() {
                 .map((el) => {
                   const active = selectedIds.includes(el.id);
                   const icon = el.type === 'text' ? 'ph ph-text-t' : el.type === 'image' ? 'ph ph-image' : el.type === 'shape' ? 'ph ph-square' : 'ph ph-cursor-click';
-                  const label = el.type === 'text' ? el.text.slice(0, 30) || 'Text' : el.type === 'button' ? el.text : el.type.charAt(0).toUpperCase() + el.type.slice(1);
+                  const autoLabel = el.type === 'text' ? el.text.slice(0, 30) || 'Text' : el.type === 'button' ? el.text : el.type.charAt(0).toUpperCase() + el.type.slice(1);
+                  const label = el.name || autoLabel;
                   return (
                     <div
                       key={el.id}
@@ -466,7 +652,39 @@ export function Customize() {
                       style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 7, cursor: 'pointer', background: active ? 'var(--violet-light)' : 'transparent' }}
                     >
                       <i className={icon} style={{ fontSize: 13, color: active ? 'var(--violet-deep)' : 'var(--text-3)', flex: 'none' }} />
-                      <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: active ? 700 : 500, color: active ? 'var(--violet-deep)' : 'var(--text-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+                      {renamingLayerId === el.id ? (
+                        <input
+                          autoFocus
+                          defaultValue={label}
+                          onClick={(e) => e.stopPropagation()}
+                          onBlur={(e) => {
+                            actions.patchFreeformElement(activePage.id, el.id, { name: e.target.value.trim() || undefined });
+                            setRenamingLayerId(null);
+                          }}
+                          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                          style={{ flex: 1, minWidth: 0, height: 22, border: '1px solid var(--violet)', borderRadius: 5, padding: '0 6px', fontSize: 12, background: 'var(--surface)', color: 'var(--text)', outline: 'none' }}
+                        />
+                      ) : (
+                        <span
+                          onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            setRenamingLayerId(el.id);
+                          }}
+                          style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: active ? 700 : 500, color: active ? 'var(--violet-deep)' : 'var(--text-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                        >
+                          {label}
+                        </span>
+                      )}
+                      {renamingLayerId !== el.id && (
+                        <IconBtn
+                          icon="ph ph-pencil-simple"
+                          title="Rename layer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRenamingLayerId(el.id);
+                          }}
+                        />
+                      )}
                     </div>
                   );
                 })}
@@ -537,6 +755,7 @@ export function Customize() {
 
               {selected.type === 'text' && (
                 <>
+                  <FontPicker value={selected.fontFamily} onChange={(fontFamily) => patchSelected({ fontFamily })} />
                   <NumberField label="Font size" value={selected.fontSize} min={8} max={140} onChange={(fontSize) => patchSelected({ fontSize })} />
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     <span style={mono()}>Weight</span>
@@ -629,7 +848,12 @@ export function Customize() {
                         }}
                       />
                     </div>
+                    {selected.locked && (
+                      <p style={{ margin: 0, fontSize: 11.5, lineHeight: 1.5, color: 'var(--text-3)' }}>Locked in its frame — drag the image on the canvas to pan, drag a handle to zoom. The frame itself won't move or resize.</p>
+                    )}
                   </div>
+
+                  {selected.locked && <SliderField label="Zoom" min={100} max={400} value={Math.round((selected.zoom ?? 1) * 100)} onChange={(v) => patchSelected({ zoom: v / 100 })} displaySuffix="%" />}
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
                     <span style={mono()}>Adjustments</span>
@@ -664,6 +888,26 @@ export function Customize() {
                     </div>
                     <input type="range" min={0} max={100} value={Math.round(selected.opacity * 100)} onChange={(e) => patchSelected({ opacity: Number(e.target.value) / 100 })} style={{ width: '100%', accentColor: 'var(--violet)' }} />
                   </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={mono()}>Stroke</span>
+                      {selected.stroke ? (
+                        <button type="button" onClick={() => patchSelected({ stroke: undefined, strokeWidth: undefined })} style={{ height: 20, padding: '0 8px', border: '1px solid var(--border)', borderRadius: 999, background: 'transparent', color: 'var(--text-3)', fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}>
+                          Remove
+                        </button>
+                      ) : (
+                        <button type="button" onClick={() => patchSelected({ stroke: '#14141A', strokeWidth: 2 })} style={{ height: 20, padding: '0 8px', border: '1px solid var(--violet)', borderRadius: 999, background: 'var(--violet-light)', color: 'var(--violet-deep)', fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}>
+                          Add
+                        </button>
+                      )}
+                    </div>
+                    {selected.stroke && (
+                      <>
+                        <ColorField label="Stroke color" value={selected.stroke} onChange={(stroke) => patchSelected({ stroke })} />
+                        <NumberField label="Stroke width" value={selected.strokeWidth ?? 2} min={1} max={40} onChange={(strokeWidth) => patchSelected({ strokeWidth })} />
+                      </>
+                    )}
+                  </div>
                 </>
               )}
 
@@ -682,10 +926,12 @@ export function Customize() {
                 </>
               )}
 
-              <div style={{ display: 'flex', gap: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
-                <NumberField label="W" value={selected.w} min={8} onChange={(w) => patchSelected({ w })} />
-                <NumberField label="H" value={selected.h} min={8} onChange={(h) => patchSelected({ h })} />
-              </div>
+              {!(selected.locked && selected.type === 'image') && (
+                <div style={{ display: 'flex', gap: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                  <NumberField label="W" value={selected.w} min={8} onChange={(w) => patchSelected({ w })} />
+                  <NumberField label="H" value={selected.h} min={8} onChange={(h) => patchSelected({ h })} />
+                </div>
+              )}
             </>
           ) : (
             <>

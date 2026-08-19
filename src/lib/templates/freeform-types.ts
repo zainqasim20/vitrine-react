@@ -23,18 +23,28 @@ interface FreeformElementBase {
   w: number;
   h: number;
   zIndex: number;
-  // Position/size frozen -- used for images that fill a decorative frame
-  // (a device mockup's screen, a mosaic tile's mat) where dragging the
-  // image out breaks the frame's whole point. Still selectable, and (for
-  // images) still replaceable -- only move/resize are blocked, and only
-  // until the user explicitly unlocks it from the panel.
+  // Custom label shown in the Layers panel instead of the auto-generated
+  // one (element text / type name). Editable there directly.
+  name?: string;
+  // Position/size frozen against normal drag/resize -- used for images that
+  // fill a decorative frame (a device mockup's screen, a mosaic tile's
+  // mat). For a locked image specifically this means something more than
+  // "frozen": see FreeformImageElement's zoom/focalX/focalY -- the frame
+  // (x/y/w/h) never changes, but the image content inside it can still be
+  // panned and zoomed without ever visually escaping the frame. Still
+  // selectable and (for images) still replaceable either way, and only
+  // locked until the user explicitly unlocks it from the panel.
   locked?: boolean;
 }
 
 export interface FreeformTextElement extends FreeformElementBase {
   type: 'text';
   text: string;
-  fontFamily: 'display' | 'body' | 'mono';
+  // A named stack ('display'/'body'/'mono', the app's own 3 built-in
+  // fonts) or any Google Fonts family name (loaded dynamically -- see
+  // google-fonts.ts). Free-form string rather than a closed union so
+  // picking a font isn't limited to a hardcoded list.
+  fontFamily: string;
   fontSize: number;
   fontWeight: number;
   color: string;
@@ -50,12 +60,17 @@ export interface FreeformImageElement extends FreeformElementBase {
   objectFit: 'cover' | 'contain';
   borderRadius: number;
   // Focal position within the frame, 0-100% each axis -- maps to CSS
-  // object-position. A simplified stand-in for a real crop-rectangle tool:
-  // it repositions which part of the source image shows through a
-  // cover-fit frame, but doesn't let you change the crop's own size the
-  // way dragging crop handles in Figma would.
+  // object-position, and is also the pan point drag adjusts when the image
+  // is locked (see zoom below).
   focalX?: number;
   focalY?: number;
+  // 1 = the image exactly fills its frame (cover-fit, no visible zoom).
+  // Above 1 scales the image up around (focalX, focalY) via a CSS
+  // transform on top of the cover-fit base, clipped by the frame's own
+  // overflow:hidden -- so enlarging a locked image genuinely zooms in
+  // *within* its frame instead of growing past its edges. On an unlocked
+  // image, resize handles change w/h directly as usual and zoom stays 1.
+  zoom?: number;
   // Adjustment sliders, all optional (absent = untouched/default). Mapped
   // to a single combined CSS filter string at render time. "Temperature"
   // is a CSS-only approximation (a warm/cool tint via sepia+hue-rotate),
@@ -75,6 +90,13 @@ export interface FreeformShapeElement extends FreeformElementBase {
   fill: string;
   borderRadius: number;
   opacity: number;
+  // Solid hex or the same gradient CSS string fill/backgroundColor use.
+  // Rendered as an inset second layer rather than a CSS border, since
+  // border-image (needed for a gradient border) ignores border-radius in
+  // every major browser -- the inset-layer trick works correctly with
+  // rounded corners for both solid and gradient strokes.
+  stroke?: string;
+  strokeWidth?: number;
 }
 
 export interface FreeformButtonElement extends FreeformElementBase {
@@ -121,6 +143,83 @@ export function freeformImageFilter(el: FreeformImageElement): string {
   }
   return parts.join(' ');
 }
+
+// ---------------------------------------------------------------------
+// Gradients -- linear/radial/conic, any number of color stops. Every
+// background/fill/stroke field in this model is just a plain CSS
+// `background`-compatible string (a hex color OR one of these gradient
+// strings written in the exact canonical form below) -- no separate
+// "is this a gradient" flag anywhere in the data model. buildFreeformGradientCss
+// always emits that canonical form; parseFreeformGradient only recognizes
+// strings in it (round-tripping the UI's own output), not arbitrary CSS.
+// ---------------------------------------------------------------------
+
+export type FreeformGradientType = 'linear' | 'radial' | 'conic';
+
+export interface FreeformGradientStop {
+  color: string;
+  position: number; // 0-100
+}
+
+export interface FreeformGradient {
+  type: FreeformGradientType;
+  angle: number; // degrees; the rotation for linear, the start angle for conic, unused for radial
+  stops: FreeformGradientStop[];
+}
+
+export function buildFreeformGradientCss(g: FreeformGradient): string {
+  const stops = [...g.stops].sort((a, b) => a.position - b.position).map((s) => `${s.color} ${s.position}%`).join(', ');
+  if (g.type === 'radial') return `radial-gradient(circle, ${stops})`;
+  if (g.type === 'conic') return `conic-gradient(from ${g.angle}deg, ${stops})`;
+  return `linear-gradient(${g.angle}deg, ${stops})`;
+}
+
+const GRADIENT_STOP_RE = /(#[0-9a-fA-F]{6})\s+(-?\d+(?:\.\d+)?)%/g;
+
+export function parseFreeformGradient(value: string): FreeformGradient | null {
+  const v = value.trim();
+  let type: FreeformGradientType;
+  let angle = 135;
+  let body: string;
+  let m: RegExpExecArray | null;
+  if ((m = /^linear-gradient\(\s*(-?\d+(?:\.\d+)?)deg\s*,\s*(.+)\)$/.exec(v))) {
+    type = 'linear';
+    angle = Number(m[1]);
+    body = m[2];
+  } else if ((m = /^radial-gradient\(\s*circle\s*,\s*(.+)\)$/.exec(v))) {
+    type = 'radial';
+    body = m[1];
+  } else if ((m = /^conic-gradient\(\s*from\s+(-?\d+(?:\.\d+)?)deg\s*,\s*(.+)\)$/.exec(v))) {
+    type = 'conic';
+    angle = Number(m[1]);
+    body = m[2];
+  } else {
+    return null;
+  }
+  const stops: FreeformGradientStop[] = [];
+  let sm: RegExpExecArray | null;
+  GRADIENT_STOP_RE.lastIndex = 0;
+  while ((sm = GRADIENT_STOP_RE.exec(body))) {
+    stops.push({ color: sm[1], position: Number(sm[2]) });
+  }
+  if (stops.length < 2) return null;
+  return { type, angle, stops };
+}
+
+// A handful of curated multi-layer backgrounds -- real, valid CSS (comma-
+// separated background-image layers, natively supported), not a
+// fabricated "mesh gradient" primitive. Several soft-edged radial
+// gradients overlapping on one element blend into each other at the
+// edges, which is what a true mesh gradient tool produces -- this is a
+// static, hand-picked approximation of that look, not a generative one.
+export const FREEFORM_VIBRANT_PRESETS: { name: string; css: string }[] = [
+  { name: 'Sunset Mesh', css: 'radial-gradient(at 15% 20%, #FF6B6B 0%, transparent 55%), radial-gradient(at 85% 15%, #FFD93D 0%, transparent 55%), radial-gradient(at 80% 85%, #6C5CE7 0%, transparent 55%), radial-gradient(at 15% 85%, #FF8FB1 0%, transparent 55%), linear-gradient(135deg, #2D1B4E 0%, #1A1030 100%)' },
+  { name: 'Aurora', css: 'radial-gradient(at 20% 30%, #00F5A0 0%, transparent 50%), radial-gradient(at 80% 20%, #00D9F5 0%, transparent 50%), radial-gradient(at 70% 80%, #6A5ACD 0%, transparent 55%), linear-gradient(160deg, #0B1120 0%, #0F2027 100%)' },
+  { name: 'Citrus Bloom', css: 'radial-gradient(at 25% 25%, #FFE066 0%, transparent 50%), radial-gradient(at 75% 30%, #FF9F1C 0%, transparent 50%), radial-gradient(at 60% 80%, #FF5C8A 0%, transparent 55%), linear-gradient(135deg, #FFF6E5 0%, #FFE8CC 100%)' },
+  { name: 'Deep Violet', css: 'radial-gradient(at 30% 20%, #AD5BFC 0%, transparent 50%), radial-gradient(at 75% 75%, #6038EE 0%, transparent 55%), radial-gradient(at 20% 85%, #2B8FF5 0%, transparent 50%), linear-gradient(150deg, #0D0D14 0%, #1A1024 100%)' },
+  { name: 'Coral Reef', css: 'radial-gradient(at 20% 30%, #FF8B94 0%, transparent 50%), radial-gradient(at 80% 25%, #FFC6C7 0%, transparent 50%), radial-gradient(at 65% 80%, #A0E7E5 0%, transparent 55%), linear-gradient(135deg, #FFF5F5 0%, #FFE3E3 100%)' },
+  { name: 'Midnight Teal', css: 'radial-gradient(at 25% 25%, #1FA971 0%, transparent 50%), radial-gradient(at 80% 30%, #0EA5A5 0%, transparent 50%), radial-gradient(at 60% 85%, #14141A 0%, transparent 60%), linear-gradient(160deg, #071B1A 0%, #0A2E2C 100%)' },
+];
 
 export const FREEFORM_CANVAS_WIDTH = 1200;
 

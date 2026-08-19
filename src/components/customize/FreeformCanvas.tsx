@@ -1,12 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import type { FreeformElement, FreeformPage } from '../../lib/templates/freeform-types';
+import type { FreeformElement, FreeformImageElement, FreeformPage } from '../../lib/templates/freeform-types';
 import { freeformImageFilter, FREEFORM_CANVAS_WIDTH } from '../../lib/templates/freeform-types';
-
-const FONT_STACK: Record<'display' | 'body' | 'mono', string> = {
-  display: "'Bricolage Grotesque', sans-serif",
-  body: "'Plus Jakarta Sans', system-ui, sans-serif",
-  mono: "'Geist Mono', monospace",
-};
+import { resolveFreeformFontCss } from '../../lib/templates/google-fonts';
 
 const SNAP_THRESHOLD = 6;
 
@@ -86,6 +81,21 @@ const RESIZE_HANDLES: Array<{ key: HandleKey; cursor: string; style: React.CSSPr
   { key: 'w', cursor: 'ew-resize', style: { top: '50%', left: -6, transform: 'translateY(-50%)' } },
 ];
 
+// Unit outward direction per handle, used to turn "drag zoom" into one
+// number regardless of which of the 8 handles was grabbed: dragging away
+// from the element's center (in that handle's own direction) zooms in,
+// dragging back toward center zooms out.
+const HANDLE_VECTOR: Record<HandleKey, [number, number]> = {
+  n: [0, -1],
+  s: [0, 1],
+  e: [1, 0],
+  w: [-1, 0],
+  ne: [0.7071, -0.7071],
+  nw: [-0.7071, -0.7071],
+  se: [0.7071, 0.7071],
+  sw: [-0.7071, 0.7071],
+};
+
 interface FreeformCanvasProps {
   page: FreeformPage;
   selectedIds: string[];
@@ -107,14 +117,20 @@ interface FreeformCanvasProps {
 // page (Customize.tsx mounts every page's canvas at once in a continuous
 // scroll, not one at a time). Every element is independently selectable,
 // draggable, and resizable from any of 8 handles (shift-drag a corner locks
-// aspect ratio), text is edited in place via contentEditable, images are
-// replaceable and carry adjustment filters, shift-click multi-selects and
-// drags/deletes as a group, alt-click steps down through whatever's
-// stacked at that point, single-element drags snap to nearby edges/
-// centers, and a `locked` element can be selected/replaced but not moved
-// or resized. This is deliberately NOT a scaled/zoomable viewport:
-// interactions stay in real pixel units to keep drag/resize/snap math
-// simple and reliable.
+// aspect ratio), text is edited in place via contentEditable, shift-click
+// multi-selects and drags/deletes as a group, alt-click steps down through
+// whatever's stacked at that point, and single-element drags snap to
+// nearby edges/centers.
+//
+// A `locked` image is a special case, not just "frozen": its frame
+// (x/y/w/h) never changes, but drag pans the image content within that
+// frame (focalX/focalY) and the resize handles zoom it (the `zoom` field)
+// via a CSS transform clipped by the frame's own overflow:hidden -- so the
+// content can never visually escape the frame no matter how far it's
+// panned or zoomed. A locked non-image element has no such content to pan/
+// zoom, so it's simply frozen, same as before. This is deliberately NOT a
+// scaled/zoomable viewport at the canvas level: interactions stay in real
+// pixel units to keep drag/resize/snap/zoom math simple and reliable.
 export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete, onResizeHeight, readOnly = false }: FreeformCanvasProps) {
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [replaceTargetId, setReplaceTargetId] = useState<string | null>(null);
@@ -178,6 +194,28 @@ export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete,
     onSelect(next.id, false);
   }
 
+  // Pans a locked image's content within its frozen frame -- the frame's
+  // own x/y/w/h are never touched here, only focalX/focalY.
+  function startImagePan(e: React.PointerEvent, el: FreeformImageElement) {
+    e.stopPropagation();
+    const startFocalX = el.focalX ?? 50;
+    const startFocalY = el.focalY ?? 50;
+    const zoom = Math.max(1, el.zoom ?? 1);
+    const sx = e.clientX;
+    const sy = e.clientY;
+    const mv = (ev: PointerEvent) => {
+      const dxPct = ((ev.clientX - sx) / el.w) * 100 * 1.5 * (1 / zoom);
+      const dyPct = ((ev.clientY - sy) / el.h) * 100 * 1.5 * (1 / zoom);
+      onPatch(el.id, { focalX: Math.max(0, Math.min(100, startFocalX - dxPct)), focalY: Math.max(0, Math.min(100, startFocalY - dyPct)) });
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', mv);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', mv);
+    window.addEventListener('pointerup', up);
+  }
+
   function startMove(e: React.PointerEvent, el: FreeformElement) {
     if (editingTextId === el.id) return;
     e.stopPropagation();
@@ -195,7 +233,12 @@ export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete,
       onSelect(el.id, false);
     }
 
-    if (el.locked) return; // selected, but its position is frozen
+    if (el.locked) {
+      // The frame itself is frozen -- but for an image, dragging still
+      // does something real: it pans the content inside the frame.
+      if (el.type === 'image' && selectedIds.length <= 1) startImagePan(e, el);
+      return;
+    }
 
     const dragIds = additive ? [...selectedIds, el.id] : alreadySelected ? selectedIds : [el.id];
     const group = page.elements.filter((e2) => dragIds.includes(e2.id) && !e2.locked);
@@ -267,6 +310,32 @@ export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete,
     window.addEventListener('pointerup', up);
   }
 
+  // The resize-handle equivalent for a locked image: instead of resizing
+  // the frame, it zooms the content inside it. Dragging any handle away
+  // from the element's center (in that handle's own direction) zooms in;
+  // dragging back toward center zooms out, floored at 1 (exact fill).
+  function startImageZoom(e: React.PointerEvent, el: FreeformImageElement, handle: HandleKey) {
+    e.stopPropagation();
+    e.preventDefault();
+    const sx = e.clientX;
+    const sy = e.clientY;
+    const startZoom = Math.max(1, el.zoom ?? 1);
+    const [vx, vy] = HANDLE_VECTOR[handle];
+    const mv = (ev: PointerEvent) => {
+      const dx = ev.clientX - sx;
+      const dy = ev.clientY - sy;
+      const outward = dx * vx + dy * vy;
+      const zoom = Math.max(1, Math.min(4, startZoom + outward / 150));
+      onPatch(el.id, { zoom: Math.round(zoom * 100) / 100 });
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', mv);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', mv);
+    window.addEventListener('pointerup', up);
+  }
+
   function startPageResize(e: React.PointerEvent) {
     if (!onResizeHeight) return;
     e.stopPropagation();
@@ -309,6 +378,7 @@ export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete,
         {guides.y !== null && <span style={{ position: 'absolute', top: guides.y, left: 0, right: 0, height: 1, background: 'var(--violet)', zIndex: 9999, pointerEvents: 'none' }} />}
         {[...page.elements].sort((a, b) => a.zIndex - b.zIndex).map((el) => {
           const selected = selectedIds.includes(el.id);
+          const isLockedImage = el.locked && el.type === 'image';
           const wrapStyle: React.CSSProperties = {
             position: 'absolute',
             left: el.x,
@@ -316,7 +386,7 @@ export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete,
             width: el.w,
             height: el.h,
             zIndex: el.zIndex,
-            cursor: readOnly ? 'default' : editingTextId === el.id ? 'text' : el.locked ? 'default' : 'move',
+            cursor: readOnly ? 'default' : editingTextId === el.id ? 'text' : isLockedImage ? 'grab' : el.locked ? 'default' : 'move',
           };
 
           return (
@@ -335,7 +405,7 @@ export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete,
                     style={{
                       width: '100%',
                       height: '100%',
-                      fontFamily: FONT_STACK[el.fontFamily],
+                      fontFamily: resolveFreeformFontCss(el.fontFamily),
                       fontSize: el.fontSize,
                       fontWeight: el.fontWeight,
                       color: el.color,
@@ -364,7 +434,7 @@ export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete,
                     style={{
                       width: '100%',
                       height: '100%',
-                      fontFamily: FONT_STACK[el.fontFamily],
+                      fontFamily: resolveFreeformFontCss(el.fontFamily),
                       fontSize: el.fontSize,
                       fontWeight: el.fontWeight,
                       color: el.color,
@@ -381,27 +451,37 @@ export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete,
                 ))}
 
               {el.type === 'image' && (
-                <img
-                  src={el.src}
-                  alt=""
-                  draggable={false}
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: el.objectFit,
-                    objectPosition: `${el.focalX ?? 50}% ${el.focalY ?? 50}%`,
-                    borderRadius: el.borderRadius,
-                    display: 'block',
-                    pointerEvents: 'none',
-                    opacity: el.opacity ?? 1,
-                    filter: freeformImageFilter(el) || undefined,
-                  }}
-                />
+                <div style={{ width: '100%', height: '100%', overflow: 'hidden', borderRadius: el.borderRadius, position: 'relative' }}>
+                  <img
+                    src={el.src}
+                    alt=""
+                    draggable={false}
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      width: '100%',
+                      height: '100%',
+                      objectFit: el.objectFit,
+                      objectPosition: `${el.focalX ?? 50}% ${el.focalY ?? 50}%`,
+                      transform: el.zoom && el.zoom !== 1 ? `scale(${el.zoom})` : undefined,
+                      transformOrigin: `${el.focalX ?? 50}% ${el.focalY ?? 50}%`,
+                      display: 'block',
+                      pointerEvents: 'none',
+                      opacity: el.opacity ?? 1,
+                      filter: freeformImageFilter(el) || undefined,
+                    }}
+                  />
+                </div>
               )}
 
-              {el.type === 'shape' && (
-                <div style={{ width: '100%', height: '100%', background: el.fill, opacity: el.opacity, borderRadius: el.shape === 'ellipse' ? '50%' : el.borderRadius }} />
-              )}
+              {el.type === 'shape' &&
+                (el.stroke && el.strokeWidth ? (
+                  <div style={{ width: '100%', height: '100%', boxSizing: 'border-box', background: el.stroke, borderRadius: el.shape === 'ellipse' ? '50%' : el.borderRadius, padding: el.strokeWidth }}>
+                    <div style={{ width: '100%', height: '100%', background: el.fill, opacity: el.opacity, borderRadius: el.shape === 'ellipse' ? '50%' : Math.max(0, el.borderRadius - el.strokeWidth) }} />
+                  </div>
+                ) : (
+                  <div style={{ width: '100%', height: '100%', background: el.fill, opacity: el.opacity, borderRadius: el.shape === 'ellipse' ? '50%' : el.borderRadius }} />
+                ))}
 
               {el.type === 'button' && (
                 <div
@@ -414,7 +494,7 @@ export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontFamily: FONT_STACK.body,
+                    fontFamily: resolveFreeformFontCss('body'),
                     fontWeight: 700,
                     fontSize: 13,
                     textAlign: 'center',
@@ -431,9 +511,9 @@ export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete,
                     style={{
                       position: 'absolute',
                       inset: -1.5,
-                      border: `1.5px solid ${el.locked ? 'var(--text-3)' : 'var(--violet)'}`,
+                      border: `1.5px solid ${el.locked && !isLockedImage ? 'var(--text-3)' : 'var(--violet)'}`,
                       borderRadius: el.type === 'shape' && el.shape === 'ellipse' ? '50%' : 4,
-                      boxShadow: el.locked ? 'none' : '0 0 0 4px rgba(122,71,245,0.12)',
+                      boxShadow: el.locked && !isLockedImage ? 'none' : '0 0 0 4px rgba(122,71,245,0.12)',
                       pointerEvents: 'none',
                     }}
                   />
@@ -476,7 +556,7 @@ export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete,
                         borderRadius: 999,
                         background: 'rgba(20,20,26,0.75)',
                         color: '#FFFFFF',
-                        fontFamily: FONT_STACK.body,
+                        fontFamily: resolveFreeformFontCss('body'),
                         fontWeight: 700,
                         fontSize: 11,
                         cursor: 'pointer',
@@ -486,12 +566,13 @@ export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete,
                     </button>
                   )}
                   {selectedIds.length === 1 &&
-                    !el.locked &&
+                    (!el.locked || isLockedImage) &&
                     RESIZE_HANDLES.map((h) => (
                       <span
                         key={h.key}
-                        onPointerDown={(e) => startResize(e, el, h.key)}
-                        style={{ position: 'absolute', width: 12, height: 12, border: '1.5px solid var(--violet)', borderRadius: 3, background: '#FFFFFF', cursor: h.cursor, ...h.style }}
+                        onPointerDown={(e) => (isLockedImage ? startImageZoom(e, el as FreeformImageElement, h.key) : startResize(e, el, h.key))}
+                        title={isLockedImage ? 'Drag to zoom' : undefined}
+                        style={{ position: 'absolute', width: 12, height: 12, border: '1.5px solid var(--violet)', borderRadius: 3, background: '#FFFFFF', cursor: isLockedImage ? 'zoom-in' : h.cursor, ...h.style }}
                       />
                     ))}
                 </>

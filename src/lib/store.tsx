@@ -200,6 +200,7 @@ const initialState: AppState = {
   projectName: '',
   prompt: '',
   template: 'Story Scroll',
+  templateMode: 'frames',
 
   vCount: 5,
   variants: [],
@@ -1573,10 +1574,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Real effect, not a toast: the chosen template's theme + layout are applied
   // to Preview right away, matching the live site's useTemplate().
+  //
+  // Phase 6: also sets templateMode from the matched template's own `kind`,
+  // driven by data rather than a hardcoded name check -- any future
+  // module-set template just needs its own distinct `kind`, not a new
+  // branch here. Every existing template's kind is not 'feature-story', so
+  // this is a no-op change for all 8 of them: templateMode keeps resolving
+  // to 'frames', same as it already does before this project ever reaches
+  // Refine (initial state).
   const useTemplate = useCallback(
     (name: string) => {
       const tpl = TEMPLATES.find((t) => t.name === name);
       if (tpl) patch({ previewTheme: tpl.theme, previewLayout: tpl.layout });
+      patch({ templateMode: tpl?.kind === 'feature-story' ? 'feature-story' : 'frames' });
       say(`"${name}" applied — add your screens to see it`);
       navigate('/create');
     },

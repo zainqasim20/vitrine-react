@@ -48,7 +48,14 @@ export const TEMPLATE_TEASERS = [
 export interface TemplateDef {
   name: string;
   desc: string;
-  kind: 'grid' | 'story' | 'split' | 'metrics' | 'editorial' | 'timeline' | 'visual' | 'deepdive';
+  // 'feature-story' is distinct from the existing 'editorial' kind --
+  // 'editorial' (Editorial Magazine) is a frame-staging treatment rendered
+  // through the same category-driven frame loop every other kind here uses;
+  // 'feature-story' (Phase 6) renders through the separate Editorial module
+  // set (src/components/templates/editorial/*) via
+  // mapPipelineToEditorialContent() instead -- a different rendering path,
+  // not a different style of the same one.
+  kind: 'grid' | 'story' | 'split' | 'metrics' | 'editorial' | 'timeline' | 'visual' | 'deepdive' | 'feature-story';
   cat: 'Minimal' | 'Narrative' | 'Data' | 'Editorial';
   theme: 'minimal' | 'editorial' | 'bold' | 'playful';
   layout: 'stacked' | 'side-by-side' | 'compact';
@@ -65,6 +72,11 @@ export const TEMPLATES: TemplateDef[] = [
   { name: 'Process Timeline', desc: 'Left-rail steps, chronological', kind: 'timeline', cat: 'Narrative', theme: 'minimal', layout: 'compact' },
   { name: 'Visual-First', desc: 'Full-bleed screens, light copy', kind: 'visual', cat: 'Minimal', theme: 'playful', layout: 'stacked' },
   { name: 'Single Screen Deep-Dive', desc: 'One screen, annotated closely', kind: 'deepdive', cat: 'Editorial', theme: 'editorial', layout: 'stacked' },
+  // Phase 6 -- the first template backed by the Editorial module set
+  // (cover/divider/brief/testimonial/overview/problem-solution/logo-
+  // derivation/typography-color-sheet/device-mockup/product-card/website-
+  // homepage/closing-mosaic) instead of the frame-staging pipeline.
+  { name: 'Feature Story', desc: 'Full module set, real pipeline data', kind: 'feature-story', cat: 'Editorial', theme: 'editorial', layout: 'side-by-side' },
 ];
 
 // Real Pexels search query per template kind -- ported from the live site's
@@ -79,6 +91,7 @@ export const TEMPLATE_QUERY: Record<TemplateDef['kind'], string> = {
   timeline: 'workflow process diagram',
   visual: 'full screen mobile app photography',
   deepdive: 'close up interface design detail',
+  'feature-story': 'magazine feature editorial spread',
 };
 
 export const HOW_STEPS = [

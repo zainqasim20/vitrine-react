@@ -27,7 +27,14 @@
 //                at all here" -- stays plain on purpose.
 //   deepdive  -- Part 5: "apply the Annotated Hero recipe directly" -- added
 //                callout-style markers around the centered frame.
-export type TemplateKind = 'grid' | 'story' | 'split' | 'metrics' | 'editorial' | 'timeline' | 'visual' | 'deepdive';
+//   feature-story -- Phase 6: not a staging recipe from the doc above (this
+//                kind renders through the separate Editorial module set, not
+//                the frame-staging pipeline the rest of this file covers) --
+//                a miniaturized version of CoverModule's own real layout
+//                (4-item meta strip + centered mark) instead, so it reads as
+//                genuinely distinct from the 8 frame-staging templates it
+//                sits next to, not a generic placeholder box.
+export type TemplateKind = 'grid' | 'story' | 'split' | 'metrics' | 'editorial' | 'timeline' | 'visual' | 'deepdive' | 'feature-story';
 
 export function TemplateThumb({ kind }: { kind: TemplateKind }) {
   if (kind === 'grid') {
@@ -107,12 +114,34 @@ export function TemplateThumb({ kind }: { kind: TemplateKind }) {
   if (kind === 'visual') {
     return <span style={{ display: 'block', height: '100%', borderRadius: 4, background: 'var(--surface-3)' }} />;
   }
-  // deepdive -- Annotated Hero: centered frame + callout markers
+  if (kind === 'deepdive') {
+    // Annotated Hero: centered frame + callout markers
+    return (
+      <div style={{ height: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <span style={{ width: '55%', height: '70%', borderRadius: 6, background: 'var(--surface-3)', border: '1.5px solid var(--border-strong)' }} />
+        <span style={{ position: 'absolute', top: '22%', left: '24%', width: 8, height: 8, borderRadius: '50%', background: 'var(--violet)', boxShadow: '0 0 0 3px var(--violet-light)' }} />
+        <span style={{ position: 'absolute', bottom: '26%', right: '24%', width: 8, height: 8, borderRadius: '50%', background: 'var(--violet)', boxShadow: '0 0 0 3px var(--violet-light)' }} />
+      </div>
+    );
+  }
+  // feature-story -- miniaturized CoverModule: a 4-item meta strip (each
+  // item just a tiny label+value bar pair, real text is unreadable at this
+  // size, same convention every other kind above already uses) above a
+  // border, then a centered circular mark in the same violet gradient
+  // CoverModule's own InitialMark fallback uses.
   return (
-    <div style={{ height: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <span style={{ width: '55%', height: '70%', borderRadius: 6, background: 'var(--surface-3)', border: '1.5px solid var(--border-strong)' }} />
-      <span style={{ position: 'absolute', top: '22%', left: '24%', width: 8, height: 8, borderRadius: '50%', background: 'var(--violet)', boxShadow: '0 0 0 3px var(--violet-light)' }} />
-      <span style={{ position: 'absolute', bottom: '26%', right: '24%', width: 8, height: 8, borderRadius: '50%', background: 'var(--violet)', boxShadow: '0 0 0 3px var(--violet-light)' }} />
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <span style={{ height: 3, width: '70%', borderRadius: 1, background: 'var(--border-strong)' }} />
+            <span style={{ height: 4, width: '90%', borderRadius: 1, background: 'var(--text-3)' }} />
+          </div>
+        ))}
+      </div>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <span style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--violet-gradient)' }} />
+      </div>
     </div>
   );
 }

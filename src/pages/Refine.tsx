@@ -3,10 +3,26 @@ import { useNavigate } from 'react-router-dom';
 import { useApp, type AppActions } from '../lib/store';
 import { DRAFTS, JOURNEY, MOTION_PRESETS, MOTION_TRIGGERS, PALETTE, PATTERNS } from '../lib/data';
 import type { AppState, CanvasSection, SceneTreatment } from '../lib/types';
-import type { DesignSystemColor, DesignSystemSheet } from '../lib/pipeline/types';
+import type { CategorySignalsConfig, DesignSystemColor, DesignSystemSheet } from '../lib/pipeline/types';
 import { NarrationIntro } from '../components/NarrationIntro';
 import { deviceFrameBoxStyle, deviceFrameKindFor, DeviceChrome, type DeviceFrameKind } from '../components/DeviceFrame';
 import { GeneratedFrameArt } from '../components/GeneratedFrameArt';
+// Phase 6 -- "Feature Story" render path only, see FeatureStoryCanvas below.
+import { buildDesignSystemSheet } from '../lib/pipeline/extract';
+import categorySignalsJson from '../lib/pipeline/config/category-signals.json';
+import { mapPipelineToEditorialContent } from '../lib/templates/editorial-mapper';
+import { CoverModule } from '../components/templates/editorial/CoverModule';
+import { SectionDividerModule } from '../components/templates/editorial/SectionDividerModule';
+import { BriefModule } from '../components/templates/editorial/BriefModule';
+import { TestimonialModule } from '../components/templates/editorial/TestimonialModule';
+import { OverviewModule } from '../components/templates/editorial/OverviewModule';
+import { ProblemSolutionModule } from '../components/templates/editorial/ProblemSolutionModule';
+import { LogoDerivationModule } from '../components/templates/editorial/LogoDerivationModule';
+import { TypographyColorSheetModule } from '../components/templates/editorial/TypographyColorSheetModule';
+import { DeviceMockupModule } from '../components/templates/editorial/DeviceMockupModule';
+import { ProductCardModule } from '../components/templates/editorial/ProductCardModule';
+import { WebsiteHomepageModule } from '../components/templates/editorial/WebsiteHomepageModule';
+import { ClosingMosaicModule } from '../components/templates/editorial/ClosingMosaicModule';
 
 const SPEED_SCALE: Record<string, number> = { '0.5x': 2, '1x': 1, '1.5x': 0.7, '2x': 0.5 };
 const EASE_CSS: Record<string, string> = { Linear: 'linear', Ease: 'ease-in-out', Bounce: 'cubic-bezier(.34,1.56,.64,1)' };
@@ -54,6 +70,16 @@ export function Refine() {
         </div>
       </main>
     );
+  }
+
+  // Phase 6 -- "Feature Story" is a genuinely different rendering path, not
+  // a style of the existing one: it renders the Editorial module set via
+  // mapPipelineToEditorialContent() instead of the category-driven frame
+  // loop below. Branches out completely before any of that loop's own
+  // variables are computed, so this is purely additive -- every other
+  // template's rendering is untouched, same code path as before this phase.
+  if (state.templateMode === 'feature-story') {
+    return <FeatureStoryCanvas state={state} actions={actions} />;
   }
 
   // Real content when the pipeline actually ran (Design System sheet +
@@ -829,6 +855,54 @@ export function Refine() {
 }
 
 // Real Design System block -- the actual extracted sheet from Extract,
+// Phase 6 -- "Feature Story" render path. Maps this project's real pipeline
+// state through mapPipelineToEditorialContent() (Phase 5) and renders the
+// 12 Editorial modules in their fixed sequence. Read-only: no resize
+// handles, no font/color panel, no selection wiring -- per-element editing
+// for these modules is explicitly deferred to a future phase, same as the
+// mapper itself deferred DeviceMockup.photoUrl and LogoDerivation.panels
+// when no real signal existed. This phase is "it renders correctly end to
+// end," not "it's editable."
+function FeatureStoryCanvas({ state, actions }: { state: AppState; actions: AppActions }) {
+  const sheet = state.pipeline.designSystemSheet || buildDesignSystemSheet(state.pipeline.perceiveRecords);
+  const projectName = state.pipeline.interview.projectName || state.title || 'Untitled case study';
+  const bundle = mapPipelineToEditorialContent({
+    projectName,
+    category: actions.currentCategoryId(),
+    categorySignals: categorySignalsJson as unknown as CategorySignalsConfig,
+    designSystemSheet: sheet,
+    approvedSections: actions.approvedSections(),
+    perceiveRecords: state.pipeline.perceiveRecords,
+    narration: state.pipeline.narration,
+    outcome: state.pipeline.interview.outcome,
+    tools: state.pipeline.interview.tools,
+  });
+
+  return (
+    <main style={{ flex: 1, background: 'var(--surface-2)', padding: '48px 24px 140px' }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={mono()}>Template · Feature Story</span>
+        <span style={{ flex: 'none', width: 24, height: 1, background: 'var(--border)' }} />
+        <span style={{ ...mono(), color: 'var(--text-3)' }}>Read-only preview — per-element editing isn't wired up for this template yet</span>
+      </div>
+      <div style={{ maxWidth: 1200, margin: '0 auto', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden' }}>
+        <CoverModule content={bundle.cover} />
+        <SectionDividerModule content={bundle.sectionDivider} />
+        <BriefModule content={bundle.brief} />
+        <TestimonialModule content={bundle.testimonial} />
+        <OverviewModule content={bundle.overview} />
+        <ProblemSolutionModule content={bundle.problemSolution} />
+        <LogoDerivationModule content={bundle.logoDerivation} />
+        <TypographyColorSheetModule content={bundle.typographyColorSheet} />
+        <DeviceMockupModule content={bundle.deviceMockup} />
+        <ProductCardModule content={bundle.productCard} />
+        <WebsiteHomepageModule content={bundle.websiteHomepage} />
+        <ClosingMosaicModule content={bundle.closingMosaic} />
+      </div>
+    </main>
+  );
+}
+
 // same fields as the editable Design System screen, read-only here.
 // Redesigned from a bordered admin-style spec table into a slim strip that
 // sits in the normal document flow -- my own visual treatment, same real

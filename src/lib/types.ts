@@ -133,6 +133,15 @@ export interface AppState {
   prompt: string;
   template: string;
 
+  // Phase 6 -- which render path Refine's canvas uses, distinct from
+  // `template` above (which only ever held a display name for Review.tsx's
+  // cosmetic "swap presentation style" picker and never changed actual
+  // rendering). 'frames' is the existing category-driven frame loop,
+  // unchanged; 'feature-story' renders the Editorial module set via
+  // mapPipelineToEditorialContent() instead. Additive: every existing
+  // template keeps resolving to 'frames'.
+  templateMode: 'frames' | 'feature-story';
+
   vCount: number;
   variants: VariantSlot[];
   vSteer: string;

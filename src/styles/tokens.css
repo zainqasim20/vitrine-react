@@ -33,6 +33,12 @@
   --font-body: 'Plus Jakarta Sans', system-ui, sans-serif;
   --font-mono: 'Geist Mono', monospace;
 
+  /* Wider than the app's normal 0.03-0.04em mono-label tracking (used for
+     UI chrome like status pills) -- for the Editorial template's meta-strip
+     caps (PROJECT / CATEGORY / DESIGNER / YEAR), which read as an
+     editorial/print-style label rather than app UI. */
+  --tracking-label-wide: 0.12em;
+
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;

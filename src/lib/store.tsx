@@ -13,7 +13,7 @@ import moduleSequences from './pipeline/config/module-sequences.json';
 import type { ApprovedSection, CategorySignalsConfig, DesignSystemColor, DesignSystemSheet, ModuleSequencesConfig, PresentFrame } from './pipeline/types';
 import type { Caption, CanvasSection, ClientStatus, ProjectRecord, ProjectSnapshot, SceneTreatment, StockPhotoEntry } from './types';
 import { buildFeatureStoryFreeformPages } from './templates/freeform-seed';
-import { freeformId, FREEFORM_CANVAS_WIDTH, type FreeformDoc, type FreeformElement, type FreeformElementType, type FreeformPage } from './templates/freeform-types';
+import { freeformId, FREEFORM_CANVAS_WIDTH, type FreeformDoc, type FreeformElement, type FreeformElementType, type FreeformPage, type FreeformShapeKind } from './templates/freeform-types';
 
 // New elements added from the Customize screen's own "+ Text/Image/Shape/
 // Button" toolbar start with this generic gray placeholder graphic (not a
@@ -541,7 +541,8 @@ export interface AppActions {
   patchFreeformElement: (pageId: string, elementId: string, patch: Partial<FreeformElement>) => void;
   removeFreeformElement: (pageId: string, elementId: string) => void;
   removeFreeformElements: (pageId: string, elementIds: string[]) => void;
-  addFreeformElement: (pageId: string, type: FreeformElementType) => void;
+  addFreeformElement: (pageId: string, type: FreeformElementType, shapeKind?: FreeformShapeKind) => void;
+  addFreeformMockup: (pageId: string, kind: 'phone' | 'laptop' | 'browser' | 'tablet', tilted: boolean) => void;
   duplicateFreeformElement: (pageId: string, elementId: string) => void;
   duplicateFreeformElements: (pageId: string, elementIds: string[]) => void;
   alignFreeformElements: (pageId: string, elementIds: string[], mode: 'left' | 'centerH' | 'right' | 'top' | 'centerV' | 'bottom') => void;
@@ -1826,7 +1827,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const addFreeformElement = useCallback(
-    (pageId: string, type: FreeformElementType) => {
+    (pageId: string, type: FreeformElementType, shapeKind?: FreeformShapeKind) => {
       snapshotFreeformHistory();
       patch((s) => {
         const page = s.freeform?.pages.find((p) => p.id === pageId);
@@ -1840,13 +1841,85 @@ export function AppProvider({ children }: { children: ReactNode }) {
         } else if (type === 'image') {
           el = { id: freeformId('image'), type: 'image', x: cx - 120, y: cy - 90, w: 240, h: 180, zIndex: z, src: FREEFORM_PLACEHOLDER_IMAGE, objectFit: 'cover', borderRadius: 8 };
         } else if (type === 'shape') {
-          el = { id: freeformId('shape'), type: 'shape', x: cx - 80, y: cy - 60, w: 160, h: 120, zIndex: z, shape: 'rect', fill: '#EAEAF0', borderRadius: 8, opacity: 1 };
+          const kind = shapeKind ?? 'rect';
+          const isLine = kind === 'line';
+          el = { id: freeformId('shape'), type: 'shape', x: cx - 80, y: isLine ? cy - 2 : cy - 60, w: 160, h: isLine ? 4 : 120, zIndex: z, shape: kind, fill: '#EAEAF0', borderRadius: kind === 'rect' ? 8 : 0, opacity: 1 };
         } else {
           el = { id: freeformId('button'), type: 'button', x: cx - 90, y: cy - 20, w: 180, h: 44, zIndex: z, text: 'Button', bg: '#7A47F5', color: '#FFFFFF', borderRadius: 999 };
         }
         return {
           freeform: mapFreeformPage(s.freeform, pageId, (p) => ({ ...p, elements: [...p.elements, el] })),
           freeformSelectedIds: [el.id],
+        };
+      });
+    },
+    [patch],
+  );
+
+  // Inserts a small composite of shape (bezel/chrome) + locked, crop-
+  // editable image elements at once -- a "mockup" here is just a
+  // convenient starting arrangement of the SAME element types everything
+  // else on the canvas uses, not a special element kind of its own. tilted
+  // reuses the generic per-element `rotate` (see freeform-types.ts) applied
+  // identically to every piece so they read as one rotated unit -- a real
+  // 2D rotation, not a synchronized 3D perspective (which would need a
+  // group/parent concept this flat element list doesn't have).
+  const addFreeformMockup = useCallback(
+    (pageId: string, kind: 'phone' | 'laptop' | 'browser' | 'tablet', tilted: boolean) => {
+      snapshotFreeformHistory();
+      patch((s) => {
+        const page = s.freeform?.pages.find((p) => p.id === pageId);
+        if (!page) return {};
+        let z = freeformMaxZ(page.elements);
+        const cx = FREEFORM_CANVAS_WIDTH / 2;
+        const cy = page.height / 2;
+        const rotate = tilted ? -6 : undefined;
+        const els: FreeformElement[] = [];
+
+        const frame = (w: number, h: number, x: number, y: number, radius: number, fill = '#16161D', name = 'Mockup frame'): FreeformElement => {
+          z += 1;
+          return { id: freeformId('shape'), type: 'shape', x, y, w, h, zIndex: z, shape: 'rect', fill, borderRadius: radius, opacity: 1, rotate, name };
+        };
+        const screen = (w: number, h: number, x: number, y: number, radius: number): FreeformElement => {
+          z += 1;
+          return { id: freeformId('image'), type: 'image', x, y, w, h, zIndex: z, src: FREEFORM_PLACEHOLDER_IMAGE, objectFit: 'cover', borderRadius: radius, locked: true, rotate, name: 'Mockup screen' };
+        };
+
+        if (kind === 'phone') {
+          const w = 220;
+          const h = 460;
+          const x = cx - w / 2;
+          const y = cy - h / 2;
+          els.push(frame(w, h, x, y, 36));
+          els.push(screen(w - 16, h - 16, x + 8, y + 8, 28));
+        } else if (kind === 'tablet') {
+          const w = 420;
+          const h = 320;
+          const x = cx - w / 2;
+          const y = cy - h / 2;
+          els.push(frame(w, h, x, y, 22));
+          els.push(screen(w - 24, h - 24, x + 12, y + 12, 12));
+        } else if (kind === 'laptop') {
+          const w = 560;
+          const h = 360;
+          const x = cx - w / 2;
+          const y = cy - h / 2;
+          els.push(frame(w, h, x, y, 14));
+          els.push(screen(w - 24, h - 48, x + 12, y + 12, 4));
+          els.push(frame(w + 60, 14, x - 30, y + h + 6, 6, '#2A2A34', 'Mockup base'));
+        } else {
+          const w = 640;
+          const h = 420;
+          const x = cx - w / 2;
+          const y = cy - h / 2;
+          els.push(frame(w, h, x, y, 12));
+          els.push(frame(w, 26, x, y, 12, '#2A2A34', 'Mockup browser bar'));
+          els.push(screen(w, h - 26, x, y + 26, 0));
+        }
+
+        return {
+          freeform: mapFreeformPage(s.freeform, pageId, (p) => ({ ...p, elements: [...p.elements, ...els] })),
+          freeformSelectedIds: els.map((e) => e.id),
         };
       });
     },
@@ -2602,6 +2675,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     removeFreeformElement,
     removeFreeformElements,
     addFreeformElement,
+    addFreeformMockup,
     duplicateFreeformElement,
     duplicateFreeformElements,
     alignFreeformElements,

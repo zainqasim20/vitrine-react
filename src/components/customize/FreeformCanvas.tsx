@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import type { FreeformElement, FreeformImageElement, FreeformPage } from '../../lib/templates/freeform-types';
-import { freeformImageFilter, FREEFORM_CANVAS_WIDTH } from '../../lib/templates/freeform-types';
+import type { FreeformElement, FreeformImageElement, FreeformPage, FreeformShapeElement } from '../../lib/templates/freeform-types';
+import { freeformImageFilter, freeformShapeClipPath, FREEFORM_CANVAS_WIDTH } from '../../lib/templates/freeform-types';
 import { resolveFreeformFontCss } from '../../lib/templates/google-fonts';
 
 const SNAP_THRESHOLD = 6;
@@ -140,6 +140,7 @@ export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete,
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [replaceTargetId, setReplaceTargetId] = useState<string | null>(null);
   const [guides, setGuides] = useState<SnapGuides>({ x: null, y: null });
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editRef = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
@@ -238,10 +239,13 @@ export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete,
       onSelect(el.id, false);
     }
 
-    if (el.locked) {
-      // The frame itself is frozen -- but for an image, dragging still
-      // does something real: it pans the content inside the frame.
-      if (el.type === 'image' && selectedIds.length <= 1) startImagePan(e, el);
+    const isCropImage = el.type === 'image' && (el.locked || (el as FreeformImageElement).cropEnabled);
+    if (el.locked || isCropImage) {
+      // The frame itself is frozen (either because the element is locked,
+      // or because an unlocked image has Crop mode on) -- but for an
+      // image, dragging still does something real: it pans the content
+      // inside the frame.
+      if (isCropImage && selectedIds.length <= 1) startImagePan(e, el as FreeformImageElement);
       return;
     }
 
@@ -358,6 +362,31 @@ export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete,
     window.addEventListener('pointerup', up);
   }
 
+  // rect/ellipse keep the existing inset-layer stroke technique (border-
+  // radius aware). The polygon shapes (triangle/star/etc) use clip-path
+  // instead, which that inset-layer trick doesn't cleanly generalize to --
+  // so those render without a stroke option, a scoped-down simplification.
+  // blur/skew are the substitute for a true freehand "pencil tool" path
+  // distortion, which would need a full vector anchor-point editor.
+  function renderShapeContent(el: FreeformShapeElement) {
+    const clipPath = freeformShapeClipPath(el.shape);
+    const transformParts: string[] = [];
+    if (el.skewX) transformParts.push(`skewX(${el.skewX}deg)`);
+    if (el.skewY) transformParts.push(`skewY(${el.skewY}deg)`);
+    const transform = transformParts.length ? transformParts.join(' ') : undefined;
+    const filter = el.blur ? `blur(${el.blur}px)` : undefined;
+    const roundable = el.shape === 'rect' || el.shape === 'ellipse';
+
+    if (roundable && el.stroke && el.strokeWidth) {
+      return (
+        <div style={{ width: '100%', height: '100%', boxSizing: 'border-box', background: el.stroke, borderRadius: el.shape === 'ellipse' ? '50%' : el.borderRadius, padding: el.strokeWidth, transform, filter }}>
+          <div style={{ width: '100%', height: '100%', background: el.fill, opacity: el.opacity, borderRadius: el.shape === 'ellipse' ? '50%' : Math.max(0, el.borderRadius - el.strokeWidth) }} />
+        </div>
+      );
+    }
+    return <div style={{ width: '100%', height: '100%', background: el.fill, opacity: el.opacity, borderRadius: el.shape === 'rect' ? el.borderRadius : el.shape === 'ellipse' ? '50%' : undefined, clipPath, transform, filter }} />;
+  }
+
   function onFileChosen(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     const targetId = replaceTargetId;
@@ -386,7 +415,8 @@ export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete,
         {guides.y !== null && <span style={{ position: 'absolute', top: guides.y, left: 0, right: 0, height: 1, background: 'var(--violet)', zIndex: 9999, pointerEvents: 'none' }} />}
         {[...page.elements].sort((a, b) => a.zIndex - b.zIndex).map((el) => {
           const selected = selectedIds.includes(el.id);
-          const isLockedImage = el.locked && el.type === 'image';
+          const isImage = el.type === 'image';
+          const isCropImage = isImage && (el.locked || (el as FreeformImageElement).cropEnabled);
           const wrapStyle: React.CSSProperties = {
             position: 'absolute',
             left: el.x,
@@ -394,11 +424,19 @@ export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete,
             width: el.w,
             height: el.h,
             zIndex: el.zIndex,
-            cursor: readOnly ? 'default' : editingTextId === el.id ? 'text' : isLockedImage ? 'grab' : el.locked ? 'default' : 'move',
+            transform: el.rotate ? `rotate(${el.rotate}deg)` : undefined,
+            cursor: readOnly ? 'default' : editingTextId === el.id ? 'text' : isCropImage ? 'grab' : el.locked ? 'default' : 'move',
           };
 
           return (
-            <div key={el.id} style={wrapStyle} onPointerDown={readOnly ? undefined : (e) => startMove(e, el)} onClick={(e) => e.stopPropagation()}>
+            <div
+              key={el.id}
+              style={wrapStyle}
+              onPointerDown={readOnly ? undefined : (e) => startMove(e, el)}
+              onClick={(e) => e.stopPropagation()}
+              onPointerEnter={() => !readOnly && isImage && setHoveredId(el.id)}
+              onPointerLeave={() => setHoveredId((h) => (h === el.id ? null : h))}
+            >
               {el.type === 'text' &&
                 (editingTextId === el.id ? (
                   <div
@@ -482,14 +520,7 @@ export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete,
                 </div>
               )}
 
-              {el.type === 'shape' &&
-                (el.stroke && el.strokeWidth ? (
-                  <div style={{ width: '100%', height: '100%', boxSizing: 'border-box', background: el.stroke, borderRadius: el.shape === 'ellipse' ? '50%' : el.borderRadius, padding: el.strokeWidth }}>
-                    <div style={{ width: '100%', height: '100%', background: el.fill, opacity: el.opacity, borderRadius: el.shape === 'ellipse' ? '50%' : Math.max(0, el.borderRadius - el.strokeWidth) }} />
-                  </div>
-                ) : (
-                  <div style={{ width: '100%', height: '100%', background: el.fill, opacity: el.opacity, borderRadius: el.shape === 'ellipse' ? '50%' : el.borderRadius }} />
-                ))}
+              {el.type === 'shape' && renderShapeContent(el)}
 
               {el.type === 'button' && (
                 <div
@@ -519,9 +550,9 @@ export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete,
                     style={{
                       position: 'absolute',
                       inset: -1.5,
-                      border: `1.5px solid ${el.locked && !isLockedImage ? 'var(--text-3)' : 'var(--violet)'}`,
+                      border: `1.5px solid ${el.locked && !isCropImage ? 'var(--text-3)' : 'var(--violet)'}`,
                       borderRadius: el.type === 'shape' && el.shape === 'ellipse' ? '50%' : 4,
-                      boxShadow: el.locked && !isLockedImage ? 'none' : '0 0 0 4px rgba(122,71,245,0.12)',
+                      boxShadow: el.locked && !isCropImage ? 'none' : '0 0 0 4px rgba(122,71,245,0.12)',
                       pointerEvents: 'none',
                     }}
                   />
@@ -545,45 +576,48 @@ export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete,
                       <i className="ph-fill ph-lock-simple" style={{ fontSize: 12 }} />
                     </span>
                   )}
-                  {el.type === 'image' && editingTextId !== el.id && (
-                    <button
-                      type="button"
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setReplaceTargetId(el.id);
-                        fileInputRef.current?.click();
-                      }}
-                      style={{
-                        position: 'absolute',
-                        top: 6,
-                        left: 6,
-                        height: 26,
-                        padding: '0 10px',
-                        border: 0,
-                        borderRadius: 999,
-                        background: 'rgba(20,20,26,0.75)',
-                        color: '#FFFFFF',
-                        fontFamily: resolveFreeformFontCss('body'),
-                        fontWeight: 700,
-                        fontSize: 11,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Replace image
-                    </button>
-                  )}
                   {selectedIds.length === 1 &&
-                    (!el.locked || isLockedImage) &&
+                    (!el.locked || isCropImage) &&
                     RESIZE_HANDLES.map((h) => (
                       <span
                         key={h.key}
-                        onPointerDown={(e) => (isLockedImage ? startImageZoom(e, el as FreeformImageElement, h.key) : startResize(e, el, h.key))}
-                        title={isLockedImage ? 'Drag to zoom' : undefined}
-                        style={{ position: 'absolute', width: 12, height: 12, border: '1.5px solid var(--violet)', borderRadius: 3, background: '#FFFFFF', cursor: isLockedImage ? 'zoom-in' : h.cursor, ...h.style }}
+                        onPointerDown={(e) => (isCropImage ? startImageZoom(e, el as FreeformImageElement, h.key) : startResize(e, el, h.key))}
+                        title={isCropImage ? 'Drag to zoom' : undefined}
+                        style={{ position: 'absolute', width: 12, height: 12, border: '1.5px solid var(--violet)', borderRadius: 3, background: '#FFFFFF', cursor: isCropImage ? 'zoom-in' : h.cursor, ...h.style }}
                       />
                     ))}
                 </>
+              )}
+              {/* Figma-style hover-revealed replace affordance -- shown on
+                  mouseover even before the image is selected, not only
+                  after clicking it first. */}
+              {isImage && editingTextId !== el.id && (selected || hoveredId === el.id) && (
+                <button
+                  type="button"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setReplaceTargetId(el.id);
+                    fileInputRef.current?.click();
+                  }}
+                  style={{
+                    position: 'absolute',
+                    top: 6,
+                    left: 6,
+                    height: 26,
+                    padding: '0 10px',
+                    border: 0,
+                    borderRadius: 999,
+                    background: 'rgba(20,20,26,0.75)',
+                    color: '#FFFFFF',
+                    fontFamily: resolveFreeformFontCss('body'),
+                    fontWeight: 700,
+                    fontSize: 11,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Replace image
+                </button>
               )}
             </div>
           );

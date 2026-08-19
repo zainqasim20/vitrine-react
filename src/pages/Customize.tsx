@@ -3,8 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../lib/store';
 import { Logo } from '../components/Logo';
 import { FreeformCanvas } from '../components/customize/FreeformCanvas';
-import type { FreeformElement, FreeformElementType, FreeformGradient, FreeformPage } from '../lib/templates/freeform-types';
-import { buildFreeformGradientCss, FREEFORM_VIBRANT_PRESETS, parseFreeformGradient } from '../lib/templates/freeform-types';
+import type { FreeformElement, FreeformElementType, FreeformGradient, FreeformPage, FreeformShapeKind } from '../lib/templates/freeform-types';
+import { buildFreeformGradientCss, FREEFORM_SCENERY_PRESETS, FREEFORM_VIBRANT_PRESETS, parseFreeformGradient } from '../lib/templates/freeform-types';
 import { FONT_CATEGORY_LABELS, GOOGLE_FONTS, loadGoogleFont, resolveFreeformFontCss, type GoogleFontCategory } from '../lib/templates/google-fonts';
 import { captureFreeformCoverThumb, exportFreeformPagesAsImages, exportFreeformPagesAsPdf } from '../lib/templates/freeform-export';
 
@@ -52,6 +52,13 @@ function isGradientCss(v: string): boolean {
   return /^(linear|radial|conic)-gradient\(/.test(v);
 }
 
+// The Media tab writes exactly this shorthand (see MediaFillPicker below),
+// so recognizing it is just checking the prefix -- same round-trip
+// approach as isGradientCss/parseFreeformGradient above.
+function isMediaCss(v: string): boolean {
+  return /^url\(/.test(v.trim());
+}
+
 // Linear/radial/conic, any number of stops, built from freeform-types.ts's
 // canonical gradient string format (buildFreeformGradientCss /
 // parseFreeformGradient) -- editing here always round-trips through that
@@ -81,7 +88,17 @@ function GradientEditor({ value, onChange }: { value: string; onChange: (css: st
         </div>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <span style={mono()}>Stops</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={mono()}>Stops</span>
+          <button
+            type="button"
+            title="Add stop"
+            onClick={() => update({ ...g, stops: [...g.stops, { color: '#FFFFFF', position: Math.min(100, (g.stops[g.stops.length - 1]?.position ?? 50) + 10) }] })}
+            style={{ width: 20, height: 20, border: '1px solid var(--border-strong)', borderRadius: 6, background: 'transparent', color: 'var(--text-2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+          >
+            <i className="ph ph-plus" style={{ fontSize: 12 }} />
+          </button>
+        </div>
         {g.stops.map((s, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <input type="color" value={s.color} onChange={(e) => update({ ...g, stops: g.stops.map((st, j) => (j === i ? { ...st, color: e.target.value } : st)) })} style={{ width: 28, height: 28, padding: 0, border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', background: 'none', flex: 'none' }} />
@@ -90,20 +107,12 @@ function GradientEditor({ value, onChange }: { value: string; onChange: (css: st
             {g.stops.length > 2 && <IconBtn icon="ph ph-x" title="Remove stop" onClick={() => update({ ...g, stops: g.stops.filter((_, j) => j !== i) })} />}
           </div>
         ))}
-        <button
-          type="button"
-          onClick={() => update({ ...g, stops: [...g.stops, { color: '#FFFFFF', position: Math.min(100, (g.stops[g.stops.length - 1]?.position ?? 50) + 10) }] })}
-          style={{ height: 28, border: '1px dashed var(--border-strong)', borderRadius: 8, background: 'transparent', color: 'var(--text-2)', fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}
-        >
-          + Add stop
-        </button>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {/* Real, valid CSS -- several soft radial gradients layered on one
-            background (natively supported, comma-separated background
-            layers), not a fabricated "mesh" primitive. One-click apply;
-            not re-editable as stops afterward since it's several gradients
-            at once, not this editor's single-gradient model. */}
+        {/* Each preset is one real, parseable gradient in this editor's own
+            canonical format -- clicking one both applies it AND updates the
+            stops list above to match, so it's a starting point to keep
+            editing, not a one-way stamp. */}
         <span style={mono()}>Vibrant presets</span>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
           {FREEFORM_VIBRANT_PRESETS.map((p) => (
@@ -111,6 +120,63 @@ function GradientEditor({ value, onChange }: { value: string; onChange: (css: st
           ))}
         </div>
       </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {/* Stylized gradient backdrops evocative of a landscape's color
+            grade -- not real photography, disclosed plainly since this
+            environment has no legitimate photo source to pull real
+            scenery images from. Same one-click-then-edit behavior as the
+            vibrant presets above. */}
+        <span style={mono()}>Scenery presets</span>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+          {FREEFORM_SCENERY_PRESETS.map((p) => (
+            <button key={p.name} type="button" title={p.name} onClick={() => onChange(p.css)} style={{ height: 36, borderRadius: 8, border: '1px solid var(--border)', background: p.css, cursor: 'pointer', padding: 0 }} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// A shape-fill/button-background/page-background-only third tab on
+// ColorField: uploads a photo and writes it as a plain CSS `background`
+// shorthand (`url(<data-uri>) center/cover no-repeat`) -- the exact same
+// string type every other fill value already is, so no new data field or
+// rendering path is needed; the shape's own border-radius/clip-path masks
+// it automatically. Video isn't offered: CSS has no background-video, and
+// giving these fields a real <video> would need a broader rendering
+// change than this pass covers -- disclosed in the empty state below
+// rather than faked with a static poster frame.
+function MediaFillPicker({ value, onChange }: { value: string | null; onChange: (css: string) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ height: 100, borderRadius: 8, border: '1px solid var(--border)', background: value ?? 'var(--surface-2)', display: value ? undefined : 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {!value && <i className="ph ph-image" style={{ fontSize: 22, color: 'var(--text-3)' }} />}
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => {
+            if (typeof reader.result === 'string') onChange(`url(${reader.result}) center/cover no-repeat`);
+          };
+          reader.readAsDataURL(file);
+        }}
+      />
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        style={{ height: 34, border: '1px solid var(--border)', borderRadius: 8, background: 'transparent', color: 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}
+      >
+        {value ? 'Replace image' : 'Upload image'}
+      </button>
+      <p style={{ margin: 0, fontSize: 11, lineHeight: 1.5, color: 'var(--text-3)' }}>Video fill isn't available yet — only image fills work here.</p>
     </div>
   );
 }
@@ -120,22 +186,33 @@ function GradientEditor({ value, onChange }: { value: string; onChange: (css: st
 // into the exact same field (a plain CSS `background`-compatible string --
 // freeform-types.ts never modeled color as its own type), so nothing else
 // needs to know which mode produced the value.
-function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (css: string) => void }) {
+function ColorField({ label, value, onChange, allowMedia }: { label: string; value: string; onChange: (css: string) => void; allowMedia?: boolean }) {
   const [open, setOpen] = useState(false);
   const isGrad = isGradientCss(value);
-  const safeSolid = !isGrad && /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#000000';
+  const isMedia = allowMedia && isMediaCss(value);
+  const safeSolid = !isGrad && !isMedia && /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#000000';
+  // Which tab is being VIEWED, distinct from what `value` currently is --
+  // needed so clicking "Media" can show the upload UI even before a file
+  // is picked (there's nothing to onChange to yet at that point). Synced
+  // from the real value each time the popover opens.
+  const [viewTab, setViewTab] = useState<'solid' | 'gradient' | 'media'>(isGrad ? 'gradient' : isMedia ? 'media' : 'solid');
+
+  function openPopover() {
+    setViewTab(isGrad ? 'gradient' : isMedia ? 'media' : 'solid');
+    setOpen(true);
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <span style={mono()}>{label}</span>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={openPopover}
         style={{ display: 'flex', alignItems: 'center', gap: 8, height: 36, border: '1px solid var(--border)', borderRadius: 8, padding: '0 8px', background: 'transparent', cursor: 'pointer' }}
       >
         <span style={{ width: 22, height: 22, borderRadius: 6, border: '1px solid var(--border)', background: value, flex: 'none' }} />
         <span style={{ flex: 1, textAlign: 'left', fontSize: 11.5, fontFamily: "'Geist Mono', monospace", color: 'var(--text-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {isGrad ? 'Gradient' : value}
+          {isGrad ? 'Gradient' : isMedia ? 'Image' : value}
         </span>
         <i className="ph ph-caret-down" style={{ fontSize: 12, color: 'var(--text-3)' }} />
       </button>
@@ -149,20 +226,42 @@ function ColorField({ label, value, onChange }: { label: string; value: string; 
               <IconBtn icon="ph ph-x" title="Close" onClick={() => setOpen(false)} />
             </div>
             <div style={{ display: 'flex', gap: 4 }}>
-              <button type="button" onClick={() => isGrad && onChange(parseFreeformGradient(value)?.stops[0]?.color ?? '#000000')} style={tabBtnStyle(!isGrad)}>
+              <button
+                type="button"
+                onClick={() => {
+                  setViewTab('solid');
+                  if (isGrad) onChange(parseFreeformGradient(value)?.stops[0]?.color ?? '#000000');
+                  else if (isMedia) onChange('#000000');
+                }}
+                style={tabBtnStyle(viewTab === 'solid')}
+              >
                 Solid
               </button>
-              <button type="button" onClick={() => !isGrad && onChange(`linear-gradient(135deg, ${safeSolid} 0%, #7A47F5 100%)`)} style={tabBtnStyle(isGrad)}>
+              <button
+                type="button"
+                onClick={() => {
+                  setViewTab('gradient');
+                  if (!isGrad) onChange(`linear-gradient(135deg, ${safeSolid} 0%, #7A47F5 100%)`);
+                }}
+                style={tabBtnStyle(viewTab === 'gradient')}
+              >
                 Gradient
               </button>
+              {allowMedia && (
+                <button type="button" onClick={() => setViewTab('media')} style={tabBtnStyle(viewTab === 'media')}>
+                  Media
+                </button>
+              )}
             </div>
-            {isGrad ? (
-              <GradientEditor value={value} onChange={onChange} />
+            {viewTab === 'gradient' ? (
+              <GradientEditor value={isGrad ? value : `linear-gradient(135deg, ${safeSolid} 0%, #7A47F5 100%)`} onChange={onChange} />
+            ) : viewTab === 'media' ? (
+              <MediaFillPicker value={isMedia ? value : null} onChange={onChange} />
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input type="color" value={safeSolid} onChange={(e) => onChange(e.target.value)} style={{ width: 36, height: 36, padding: 0, border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', background: 'none' }} />
                 <input
-                  value={value}
+                  value={isMedia ? safeSolid : value}
                   onChange={(e) => onChange(e.target.value)}
                   style={{ flex: 1, height: 36, border: '1px solid var(--border)', borderRadius: 8, padding: '0 10px', fontFamily: "'Geist Mono', monospace", fontSize: 12, color: 'var(--text)', background: 'transparent', outline: 'none' }}
                 />
@@ -364,8 +463,25 @@ function SliderField({ label, value, onChange, min, max, displaySuffix = '' }: {
 const ADD_TOOLS: { type: FreeformElementType; icon: string; label: string }[] = [
   { type: 'text', icon: 'ph ph-text-t', label: 'Text' },
   { type: 'image', icon: 'ph ph-image', label: 'Image' },
-  { type: 'shape', icon: 'ph ph-square', label: 'Shape' },
   { type: 'button', icon: 'ph ph-cursor-click', label: 'Button' },
+];
+
+const SHAPE_KINDS: { kind: FreeformShapeKind; icon: string; label: string }[] = [
+  { kind: 'rect', icon: 'ph ph-square', label: 'Rectangle' },
+  { kind: 'ellipse', icon: 'ph ph-circle', label: 'Ellipse' },
+  { kind: 'triangle', icon: 'ph ph-triangle', label: 'Triangle' },
+  { kind: 'pentagon', icon: 'ph ph-pentagon', label: 'Pentagon' },
+  { kind: 'hexagon', icon: 'ph ph-hexagon', label: 'Hexagon' },
+  { kind: 'star', icon: 'ph ph-star', label: 'Star' },
+  { kind: 'arrow', icon: 'ph ph-arrow-right', label: 'Arrow' },
+  { kind: 'line', icon: 'ph ph-minus', label: 'Line' },
+];
+
+const MOCKUP_KINDS: { kind: 'phone' | 'laptop' | 'browser' | 'tablet'; icon: string; label: string }[] = [
+  { kind: 'phone', icon: 'ph ph-device-mobile', label: 'Phone' },
+  { kind: 'tablet', icon: 'ph ph-device-tablet', label: 'Tablet' },
+  { kind: 'laptop', icon: 'ph ph-laptop', label: 'Laptop' },
+  { kind: 'browser', icon: 'ph ph-browser', label: 'Browser' },
 ];
 
 function findFreeformElement(pages: FreeformPage[], id: string): { page: FreeformPage; el: FreeformElement } | null {
@@ -399,6 +515,13 @@ export function Customize() {
   const [renamingLayerId, setRenamingLayerId] = useState<string | null>(null);
   const [fileMenuOpen, setFileMenuOpen] = useState(false);
   const [exportBusy, setExportBusy] = useState<string | null>(null);
+  const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
+  const [mockupMenuOpen, setMockupMenuOpen] = useState(false);
+  const [aspectLocked, setAspectLocked] = useState(false);
+  const [leftWidth, setLeftWidth] = useState(220);
+  const [rightWidth, setRightWidth] = useState(280);
+  const [layersHeight, setLayersHeight] = useState(180);
+  const aspectRatioRef = useRef(1);
   const mainRef = useRef<HTMLElement>(null);
   const pageRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const surfaceRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -460,6 +583,15 @@ export function Customize() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [actions]);
 
+  // The W/H lock-aspect-ratio toggle is a transient UI mode, not part of
+  // the element's own data -- reset it whenever the single selection
+  // changes so it doesn't silently carry over and scale an unrelated
+  // element the next time a W/H field is edited.
+  const soleSelectedId = state.freeformSelectedIds.length === 1 ? state.freeformSelectedIds[0] : null;
+  useEffect(() => {
+    setAspectLocked(false);
+  }, [soleSelectedId]);
+
   if (!state.freeform || state.freeform.pages.length === 0) {
     return (
       <main style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-2)', padding: '96px 32px' }}>
@@ -490,6 +622,26 @@ export function Customize() {
 
   function patchSelected(patch: Record<string, unknown>) {
     if (selected) actions.patchFreeformElement(selectedPage.id, selected.id, patch);
+  }
+
+  // Drag-to-resize for the two side panels (width) and the Layers list
+  // (height) -- a generic pointer-delta-to-clamped-value helper shared by
+  // all three, rather than three copies of the same drag math.
+  function startEdgeResize(e: React.PointerEvent, axis: 'x' | 'y', get: () => number, set: (n: number) => void, min: number, max: number, invert = false) {
+    e.preventDefault();
+    e.stopPropagation();
+    const start = axis === 'x' ? e.clientX : e.clientY;
+    const startVal = get();
+    const mv = (ev: PointerEvent) => {
+      const delta = (axis === 'x' ? ev.clientX : ev.clientY) - start;
+      set(Math.max(min, Math.min(max, Math.round(startVal + (invert ? -delta : delta)))));
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', mv);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', mv);
+    window.addEventListener('pointerup', up);
   }
 
   function exportPages(): { name: string; el: HTMLDivElement }[] {
@@ -536,7 +688,19 @@ export function Customize() {
   }
 
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--text)' }}>
+    <div
+      onClick={(e) => {
+        // Clicking anywhere that isn't the header chrome or a side panel
+        // (which includes their floating popovers -- see the comment
+        // below) deselects the current element. Real canvas elements
+        // already stopPropagation() on their own click/pointerdown, so
+        // this only ever fires for genuine empty-space clicks.
+        const t = e.target as HTMLElement;
+        if (t.closest('header, aside')) return;
+        actions.selectFreeform(activePage.id, null);
+      }}
+      style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--text)' }}
+    >
       <header style={{ flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '12px 20px', borderBottom: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <Logo height={22} />
@@ -612,11 +776,96 @@ export function Customize() {
               {t.label}
             </button>
           ))}
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              onClick={() => setShapeMenuOpen((v) => !v)}
+              title="Add a shape"
+              style={{ height: 34, padding: '0 10px 0 12px', border: '1px solid var(--border)', borderRadius: 8, background: 'transparent', color: 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 12.5, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            >
+              <i className="ph ph-square" style={{ fontSize: 14 }} />
+              Shape
+              <i className="ph ph-caret-down" style={{ fontSize: 10 }} />
+            </button>
+            {shapeMenuOpen && (
+              <>
+                <div onClick={() => setShapeMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 100 }} />
+                <div style={{ position: 'absolute', top: 38, right: 0, width: 168, zIndex: 101, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: 'var(--shadow-lg)', padding: 6, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+                  {SHAPE_KINDS.map((s) => (
+                    <button
+                      key={s.kind}
+                      type="button"
+                      onClick={() => {
+                        actions.addFreeformElement(activePage.id, 'shape', s.kind);
+                        setShapeMenuOpen(false);
+                      }}
+                      title={s.label}
+                      style={{ height: 56, border: 0, borderRadius: 8, background: 'transparent', color: 'var(--text-2)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', fontSize: 9.5, fontFamily: "'Geist Mono', monospace" }}
+                    >
+                      <i className={s.icon} style={{ fontSize: 18 }} />
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              onClick={() => setMockupMenuOpen((v) => !v)}
+              title="Add a device mockup"
+              style={{ height: 34, padding: '0 10px 0 12px', border: '1px solid var(--border)', borderRadius: 8, background: 'transparent', color: 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 12.5, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            >
+              <i className="ph ph-device-mobile" style={{ fontSize: 14 }} />
+              Mockup
+              <i className="ph ph-caret-down" style={{ fontSize: 10 }} />
+            </button>
+            {mockupMenuOpen && (
+              <>
+                <div onClick={() => setMockupMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 100 }} />
+                <div style={{ position: 'absolute', top: 38, right: 0, width: 220, zIndex: 101, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: 'var(--shadow-lg)', padding: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {MOCKUP_KINDS.map((m) => (
+                    <div key={m.kind} style={{ display: 'flex', gap: 2 }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          actions.addFreeformMockup(activePage.id, m.kind, false);
+                          setMockupMenuOpen(false);
+                        }}
+                        style={{ flex: 1, height: 34, border: 0, borderRadius: 8, background: 'transparent', color: 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 12.5, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, padding: '0 8px' }}
+                      >
+                        <i className={m.icon} style={{ fontSize: 15, color: 'var(--text-2)' }} />
+                        {m.label}
+                      </button>
+                      <button
+                        type="button"
+                        title={`${m.label}, tilted`}
+                        onClick={() => {
+                          actions.addFreeformMockup(activePage.id, m.kind, true);
+                          setMockupMenuOpen(false);
+                        }}
+                        style={{ width: 34, height: 34, border: 0, borderRadius: 8, background: 'transparent', color: 'var(--text-3)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      >
+                        <i className="ph ph-arrows-clockwise" style={{ fontSize: 14 }} />
+                      </button>
+                    </div>
+                  ))}
+                  <p style={{ margin: '4px 8px 2px', fontSize: 10.5, lineHeight: 1.5, color: 'var(--text-3)' }}>The rotate icon adds a tilted variant. Frame + screen insert together — the screen is locked/crop-ready, ready to replace.</p>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-        <aside style={{ flex: 'none', width: 220, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border)', background: 'var(--surface-2)' }}>
+        <aside style={{ position: 'relative', flex: 'none', width: leftWidth, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border)', background: 'var(--surface-2)' }}>
+          <div
+            onPointerDown={(e) => startEdgeResize(e, 'x', () => leftWidth, setLeftWidth, 180, 420)}
+            title="Drag to resize"
+            style={{ position: 'absolute', top: 0, bottom: 0, right: -4, width: 8, cursor: 'ew-resize', zIndex: 5 }}
+          />
           <div style={{ padding: '14px 14px 8px' }}>
             <span style={mono()}>Pages</span>
           </div>
@@ -733,14 +982,19 @@ export function Customize() {
           </div>
         </main>
 
-        <aside style={{ flex: 'none', width: 280, borderLeft: '1px solid var(--border)', overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <aside style={{ position: 'relative', flex: 'none', width: rightWidth, borderLeft: '1px solid var(--border)', overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div
+            onPointerDown={(e) => startEdgeResize(e, 'x', () => rightWidth, setRightWidth, 220, 480, true)}
+            title="Drag to resize"
+            style={{ position: 'absolute', top: 0, bottom: 0, left: -4, width: 8, cursor: 'ew-resize', zIndex: 5 }}
+          />
           {/* Elements can overlap (e.g. Cover's dark scrim sits directly on
               top of its full-bleed photo) -- clicking the canvas only ever
               reaches the topmost one at that point, same as any layered
               editor. This list is the way to reach whatever's underneath. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span style={mono()}>Layers · {activePage.name}</span>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 180, overflowY: 'auto' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: layersHeight, overflowY: 'auto' }}>
               {[...activePage.elements]
                 .sort((a, b) => b.zIndex - a.zIndex)
                 .map((el) => {
@@ -791,6 +1045,13 @@ export function Customize() {
                     </div>
                   );
                 })}
+            </div>
+            <div
+              onPointerDown={(e) => startEdgeResize(e, 'y', () => layersHeight, setLayersHeight, 60, 520)}
+              title="Drag to resize the layers list"
+              style={{ height: 8, margin: '-2px 0', cursor: 'ns-resize', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <span style={{ width: 26, height: 3, borderRadius: 2, background: 'var(--border-strong)' }} />
             </div>
           </div>
           <div style={{ height: 1, background: 'var(--border)' }} />
@@ -897,66 +1158,42 @@ export function Customize() {
 
               {selected.type === 'image' && (
                 <>
+                  {/* A real dropdown, not the previous Cover/Contain button
+                      pair plus a separate drag-a-dot crop widget -- "Crop"
+                      turns on the same pan (drag on canvas) / zoom (drag a
+                      handle) interaction a locked mockup image already
+                      uses, generalized to work on ANY image via the new
+                      cropEnabled field (see freeform-types.ts), not just
+                      locked ones. Switching back to Fill/Fit turns it off
+                      and returns to normal move/resize. */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     <span style={mono()}>Fit</span>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      {(['cover', 'contain'] as const).map((f) => (
-                        <button
-                          key={f}
-                          type="button"
-                          onClick={() => patchSelected({ objectFit: f })}
-                          style={{ flex: 1, height: 32, border: `1.5px solid ${selected.objectFit === f ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 8, background: selected.objectFit === f ? 'var(--violet-light)' : 'transparent', color: selected.objectFit === f ? 'var(--violet-deep)' : 'var(--text-2)', fontSize: 12, fontWeight: 700, textTransform: 'capitalize', cursor: 'pointer' }}
-                        >
-                          {f}
-                        </button>
-                      ))}
-                    </div>
+                    <select
+                      value={selected.objectFit === 'contain' ? 'fit' : selected.cropEnabled ? 'crop' : 'fill'}
+                      onChange={(e) => {
+                        const mode = e.target.value;
+                        if (mode === 'fit') patchSelected({ objectFit: 'contain', cropEnabled: false });
+                        else if (mode === 'crop') patchSelected({ objectFit: 'cover', cropEnabled: true });
+                        else patchSelected({ objectFit: 'cover', cropEnabled: false });
+                      }}
+                      style={{ height: 34, border: '1px solid var(--border)', borderRadius: 8, padding: '0 10px', fontSize: 13, fontFamily: "'Plus Jakarta Sans', sans-serif", color: 'var(--text)', background: 'transparent', outline: 'none', cursor: 'pointer' }}
+                    >
+                      <option value="fill">Fill</option>
+                      <option value="fit">Fit</option>
+                      <option value="crop">Crop</option>
+                    </select>
                   </div>
                   <NumberField label="Corner radius" value={selected.borderRadius} min={0} max={999} onChange={(borderRadius) => patchSelected({ borderRadius })} />
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
-                    <span style={mono()}>Crop position (drag the dot)</span>
-                    <div
-                      onPointerDown={(e) => {
-                        const track = e.currentTarget;
-                        const move = (ev: PointerEvent) => {
-                          const rect = track.getBoundingClientRect();
-                          const fx = Math.max(0, Math.min(100, ((ev.clientX - rect.left) / rect.width) * 100));
-                          const fy = Math.max(0, Math.min(100, ((ev.clientY - rect.top) / rect.height) * 100));
-                          patchSelected({ focalX: Math.round(fx), focalY: Math.round(fy) });
-                        };
-                        const up = () => {
-                          window.removeEventListener('pointermove', move);
-                          window.removeEventListener('pointerup', up);
-                        };
-                        move(e.nativeEvent);
-                        window.addEventListener('pointermove', move);
-                        window.addEventListener('pointerup', up);
-                      }}
-                      style={{ position: 'relative', height: 80, borderRadius: 8, border: '1px solid var(--border)', overflow: 'hidden', cursor: 'crosshair', background: `url(${selected.src}) center/cover` }}
-                    >
-                      <span
-                        style={{
-                          position: 'absolute',
-                          left: `${selected.focalX ?? 50}%`,
-                          top: `${selected.focalY ?? 50}%`,
-                          width: 12,
-                          height: 12,
-                          borderRadius: 999,
-                          background: '#FFFFFF',
-                          border: '2px solid var(--violet)',
-                          transform: 'translate(-50%, -50%)',
-                          pointerEvents: 'none',
-                          boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
-                        }}
-                      />
+                  {(selected.locked || selected.cropEnabled) && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                      <SliderField label="Zoom" min={100} max={400} value={Math.round((selected.zoom ?? 1) * 100)} onChange={(v) => patchSelected({ zoom: v / 100 })} displaySuffix="%" />
+                      <p style={{ margin: 0, fontSize: 11.5, lineHeight: 1.5, color: 'var(--text-3)' }}>
+                        {selected.locked ? "Locked in its frame — " : ''}Drag the image on the canvas to pan, drag a handle to zoom.
+                        {selected.locked ? " The frame itself won't move or resize." : ' Switch back to Fill or Fit to move/resize normally again.'}
+                      </p>
                     </div>
-                    {selected.locked && (
-                      <p style={{ margin: 0, fontSize: 11.5, lineHeight: 1.5, color: 'var(--text-3)' }}>Locked in its frame — drag the image on the canvas to pan, drag a handle to zoom. The frame itself won't move or resize.</p>
-                    )}
-                  </div>
-
-                  {selected.locked && <SliderField label="Zoom" min={100} max={400} value={Math.round((selected.zoom ?? 1) * 100)} onChange={(v) => patchSelected({ zoom: v / 100 })} displaySuffix="%" />}
+                  )}
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
                     <span style={mono()}>Adjustments</span>
@@ -982,7 +1219,7 @@ export function Customize() {
 
               {selected.type === 'shape' && (
                 <>
-                  <ColorField label="Fill" value={selected.fill} onChange={(fill) => patchSelected({ fill })} />
+                  <ColorField label="Fill" value={selected.fill} onChange={(fill) => patchSelected({ fill })} allowMedia />
                   <NumberField label="Corner radius" value={selected.borderRadius} min={0} max={999} onChange={(borderRadius) => patchSelected({ borderRadius })} />
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
@@ -991,25 +1228,38 @@ export function Customize() {
                     </div>
                     <input type="range" min={0} max={100} value={Math.round(selected.opacity * 100)} onChange={(e) => patchSelected({ opacity: Number(e.target.value) / 100 })} style={{ width: '100%', accentColor: 'var(--violet)' }} />
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={mono()}>Stroke</span>
-                      {selected.stroke ? (
-                        <button type="button" onClick={() => patchSelected({ stroke: undefined, strokeWidth: undefined })} style={{ height: 20, padding: '0 8px', border: '1px solid var(--border)', borderRadius: 999, background: 'transparent', color: 'var(--text-3)', fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}>
-                          Remove
-                        </button>
-                      ) : (
-                        <button type="button" onClick={() => patchSelected({ stroke: '#14141A', strokeWidth: 2 })} style={{ height: 20, padding: '0 8px', border: '1px solid var(--violet)', borderRadius: 999, background: 'var(--violet-light)', color: 'var(--violet-deep)', fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}>
-                          Add
-                        </button>
+                  {(selected.shape === 'rect' || selected.shape === 'ellipse') && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={mono()}>Stroke</span>
+                        {selected.stroke ? (
+                          <button type="button" onClick={() => patchSelected({ stroke: undefined, strokeWidth: undefined })} style={{ height: 20, padding: '0 8px', border: '1px solid var(--border)', borderRadius: 999, background: 'transparent', color: 'var(--text-3)', fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}>
+                            Remove
+                          </button>
+                        ) : (
+                          <button type="button" onClick={() => patchSelected({ stroke: '#14141A', strokeWidth: 2 })} style={{ height: 20, padding: '0 8px', border: '1px solid var(--violet)', borderRadius: 999, background: 'var(--violet-light)', color: 'var(--violet-deep)', fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}>
+                            Add
+                          </button>
+                        )}
+                      </div>
+                      {selected.stroke && (
+                        <>
+                          <ColorField label="Stroke color" value={selected.stroke} onChange={(stroke) => patchSelected({ stroke })} />
+                          <NumberField label="Stroke width" value={selected.strokeWidth ?? 2} min={1} max={40} onChange={(strokeWidth) => patchSelected({ strokeWidth })} />
+                        </>
                       )}
                     </div>
-                    {selected.stroke && (
-                      <>
-                        <ColorField label="Stroke color" value={selected.stroke} onChange={(stroke) => patchSelected({ stroke })} />
-                        <NumberField label="Stroke width" value={selected.strokeWidth ?? 2} min={1} max={40} onChange={(strokeWidth) => patchSelected({ strokeWidth })} />
-                      </>
-                    )}
+                  )}
+                  {/* A scoped-down stand-in for a true freehand "pencil
+                      tool" path editor (a full vector anchor-point editor
+                      is out of reach for this pass): blur softens the
+                      shape, skew shears it -- real, working distortion,
+                      just not literally hand-redrawing the outline. */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                    <span style={mono()}>Distort</span>
+                    <SliderField label="Blur" min={0} max={20} value={selected.blur ?? 0} onChange={(blur) => patchSelected({ blur })} displaySuffix="px" />
+                    <SliderField label="Skew X" min={-60} max={60} value={selected.skewX ?? 0} onChange={(skewX) => patchSelected({ skewX })} displaySuffix="°" />
+                    <SliderField label="Skew Y" min={-60} max={60} value={selected.skewY ?? 0} onChange={(skewY) => patchSelected({ skewY })} displaySuffix="°" />
                   </div>
                 </>
               )}
@@ -1024,22 +1274,58 @@ export function Customize() {
                       style={{ height: 34, border: '1px solid var(--border)', borderRadius: 8, padding: '0 10px', fontSize: 13, color: 'var(--text)', background: 'transparent', outline: 'none' }}
                     />
                   </div>
-                  <ColorField label="Background" value={selected.bg} onChange={(bg) => patchSelected({ bg })} />
+                  <ColorField label="Background" value={selected.bg} onChange={(bg) => patchSelected({ bg })} allowMedia />
                   <ColorField label="Text color" value={selected.color} onChange={(color) => patchSelected({ color })} />
                 </>
               )}
 
-              {!(selected.locked && selected.type === 'image') && (
-                <div style={{ display: 'flex', gap: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
-                  <NumberField label="W" value={selected.w} min={8} onChange={(w) => patchSelected({ w })} />
-                  <NumberField label="H" value={selected.h} min={8} onChange={(h) => patchSelected({ h })} />
+              {/* Generic rotate -- every element type, not just shapes/
+                  mockups -- applied to the whole element (see
+                  FreeformCanvas's wrap-level transform). */}
+              <SliderField label="Rotate" min={-180} max={180} value={selected.rotate ?? 0} onChange={(rotate) => patchSelected({ rotate })} displaySuffix="°" />
+
+              {!(selected.type === 'image' && (selected.locked || selected.cropEnabled)) && (
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                  <div style={{ flex: 1 }}>
+                    <NumberField
+                      label="W"
+                      value={selected.w}
+                      min={8}
+                      onChange={(w) => {
+                        if (aspectLocked) patchSelected({ w, h: Math.max(8, Math.round(w / aspectRatioRef.current)) });
+                        else patchSelected({ w });
+                      }}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    title={aspectLocked ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
+                    onClick={() => {
+                      if (!aspectLocked) aspectRatioRef.current = selected.w / selected.h || 1;
+                      setAspectLocked((v) => !v);
+                    }}
+                    style={{ width: 32, height: 32, flex: 'none', border: `1px solid ${aspectLocked ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 8, background: aspectLocked ? 'var(--violet-light)' : 'transparent', color: aspectLocked ? 'var(--violet-deep)' : 'var(--text-3)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                  >
+                    <i className={aspectLocked ? 'ph-fill ph-link-simple' : 'ph ph-link-simple-break'} style={{ fontSize: 14 }} />
+                  </button>
+                  <div style={{ flex: 1 }}>
+                    <NumberField
+                      label="H"
+                      value={selected.h}
+                      min={8}
+                      onChange={(h) => {
+                        if (aspectLocked) patchSelected({ h, w: Math.max(8, Math.round(h * aspectRatioRef.current)) });
+                        else patchSelected({ h });
+                      }}
+                    />
+                  </div>
                 </div>
               )}
             </>
           ) : (
             <>
               <span style={mono()}>Page background</span>
-              <ColorField label="Color" value={activePage.backgroundColor} onChange={(hex) => actions.setFreeformPageBackground(activePage.id, hex)} />
+              <ColorField label="Color" value={activePage.backgroundColor} onChange={(hex) => actions.setFreeformPageBackground(activePage.id, hex)} allowMedia />
               <NumberField label="Page height" value={activePage.height} min={120} max={4000} onChange={(height) => actions.setFreeformPageHeight(activePage.id, height)} />
               <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: 'var(--text-3)' }}>
                 Click any element to select it, shift-click to select more than one. Drag to move (snaps to nearby edges), drag the bottom-right handle to resize, double-click text to edit.

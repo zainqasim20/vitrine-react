@@ -35,6 +35,12 @@ interface FreeformElementBase {
   // selectable and (for images) still replaceable either way, and only
   // locked until the user explicitly unlocks it from the panel.
   locked?: boolean;
+  // 2D rotation in degrees, any element type. Applied to the whole element
+  // (selection outline + handles included) rather than just its inner
+  // content -- a deliberately simpler stand-in for a true 3D perspective
+  // tilt, which would need a group/parent concept this flat element list
+  // doesn't have. Good enough for "mockup at an angle"; not a real 3D scene.
+  rotate?: number;
 }
 
 export interface FreeformTextElement extends FreeformElementBase {
@@ -71,6 +77,16 @@ export interface FreeformImageElement extends FreeformElementBase {
   // *within* its frame instead of growing past its edges. On an unlocked
   // image, resize handles change w/h directly as usual and zoom stays 1.
   zoom?: number;
+  // Opts an UNLOCKED image into the same pan/zoom-within-frame interaction
+  // normally reserved for locked images -- the Fit panel's "Crop" option.
+  // While true, dragging the image on canvas pans it (focalX/focalY) and
+  // the resize handles zoom it (zoom), same mechanic, same code path as a
+  // locked image; switching back to Fill/Fit clears it and restores normal
+  // move/resize. Independent of `locked` (which is about freezing position
+  // permanently, e.g. a mockup frame) -- an image can be cropEnabled without
+  // being locked, and a locked image ignores this since it always behaves
+  // this way regardless.
+  cropEnabled?: boolean;
   // Adjustment sliders, all optional (absent = untouched/default). Mapped
   // to a single combined CSS filter string at render time. "Temperature"
   // is a CSS-only approximation (a warm/cool tint via sepia+hue-rotate),
@@ -84,9 +100,17 @@ export interface FreeformImageElement extends FreeformElementBase {
   temperature?: number; // -100 (cool) .. 100 (warm), 0 = untouched
 }
 
+export type FreeformShapeKind = 'rect' | 'ellipse' | 'triangle' | 'pentagon' | 'hexagon' | 'star' | 'arrow' | 'line';
+
 export interface FreeformShapeElement extends FreeformElementBase {
   type: 'shape';
-  shape: 'rect' | 'ellipse';
+  shape: FreeformShapeKind;
+  // Solid hex, the same gradient CSS string fill/backgroundColor use, OR a
+  // `url(<data-uri>) center/cover no-repeat` CSS background shorthand --
+  // ColorField's Media tab writes that same shorthand, so an uploaded photo
+  // becomes the shape's fill and is naturally clipped to the shape's own
+  // outline (border-radius or clip-path below), no separate "image shape"
+  // element type needed.
   fill: string;
   borderRadius: number;
   opacity: number;
@@ -94,9 +118,19 @@ export interface FreeformShapeElement extends FreeformElementBase {
   // Rendered as an inset second layer rather than a CSS border, since
   // border-image (needed for a gradient border) ignores border-radius in
   // every major browser -- the inset-layer trick works correctly with
-  // rounded corners for both solid and gradient strokes.
+  // rounded corners for both solid and gradient strokes. Only supported for
+  // rect/ellipse -- the polygon shapes below use clip-path, which the
+  // inset-layer trick doesn't cleanly generalize to, so they render
+  // without a stroke option (a scoped-down simplification, disclosed).
   stroke?: string;
   strokeWidth?: number;
+  // A scoped-down stand-in for true freehand "pencil tool" path distortion
+  // (a full vector anchor-point editor is out of reach for this pass):
+  // blur softens the shape's edges, skew shears it -- both real, applied
+  // ones, just not the same tool as literally redrawing the outline by hand.
+  blur?: number; // px
+  skewX?: number; // deg
+  skewY?: number; // deg
 }
 
 export interface FreeformButtonElement extends FreeformElementBase {
@@ -142,6 +176,27 @@ export function freeformImageFilter(el: FreeformImageElement): string {
     }
   }
   return parts.join(' ');
+}
+
+// clip-path for the shape kinds beyond plain rect/ellipse (those two use
+// border-radius instead, so this returns undefined for them). Fixed
+// polygons, not a generative shape system -- a reasonable curated set
+// covering the common design-tool primitives.
+export function freeformShapeClipPath(shape: FreeformShapeKind): string | undefined {
+  switch (shape) {
+    case 'triangle':
+      return 'polygon(50% 0%, 0% 100%, 100% 100%)';
+    case 'pentagon':
+      return 'polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)';
+    case 'hexagon':
+      return 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)';
+    case 'star':
+      return 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)';
+    case 'arrow':
+      return 'polygon(0% 35%, 60% 35%, 60% 15%, 100% 50%, 60% 85%, 60% 65%, 0% 65%)';
+    default:
+      return undefined;
+  }
 }
 
 // ---------------------------------------------------------------------
@@ -206,19 +261,36 @@ export function parseFreeformGradient(value: string): FreeformGradient | null {
   return { type, angle, stops };
 }
 
-// A handful of curated multi-layer backgrounds -- real, valid CSS (comma-
-// separated background-image layers, natively supported), not a
-// fabricated "mesh gradient" primitive. Several soft-edged radial
-// gradients overlapping on one element blend into each other at the
-// edges, which is what a true mesh gradient tool produces -- this is a
-// static, hand-picked approximation of that look, not a generative one.
+// A handful of curated vibrant backgrounds -- each written as ONE gradient
+// (radial/conic/linear, multiple stops) in this file's own canonical
+// buildFreeformGradientCss format, specifically so parseFreeformGradient
+// can read it straight back into the stops editor the moment it's applied
+// (clicking a preset both sets the fill AND opens it up for editing).
+// Earlier drafts layered several independent radial gradients for a
+// softer "mesh" look, but that composite CSS wasn't representable in this
+// editor's single-gradient model and so couldn't be edited afterward --
+// traded that subtlety for real editability, which is what was asked for.
 export const FREEFORM_VIBRANT_PRESETS: { name: string; css: string }[] = [
-  { name: 'Sunset Mesh', css: 'radial-gradient(at 15% 20%, #FF6B6B 0%, transparent 55%), radial-gradient(at 85% 15%, #FFD93D 0%, transparent 55%), radial-gradient(at 80% 85%, #6C5CE7 0%, transparent 55%), radial-gradient(at 15% 85%, #FF8FB1 0%, transparent 55%), linear-gradient(135deg, #2D1B4E 0%, #1A1030 100%)' },
-  { name: 'Aurora', css: 'radial-gradient(at 20% 30%, #00F5A0 0%, transparent 50%), radial-gradient(at 80% 20%, #00D9F5 0%, transparent 50%), radial-gradient(at 70% 80%, #6A5ACD 0%, transparent 55%), linear-gradient(160deg, #0B1120 0%, #0F2027 100%)' },
-  { name: 'Citrus Bloom', css: 'radial-gradient(at 25% 25%, #FFE066 0%, transparent 50%), radial-gradient(at 75% 30%, #FF9F1C 0%, transparent 50%), radial-gradient(at 60% 80%, #FF5C8A 0%, transparent 55%), linear-gradient(135deg, #FFF6E5 0%, #FFE8CC 100%)' },
-  { name: 'Deep Violet', css: 'radial-gradient(at 30% 20%, #AD5BFC 0%, transparent 50%), radial-gradient(at 75% 75%, #6038EE 0%, transparent 55%), radial-gradient(at 20% 85%, #2B8FF5 0%, transparent 50%), linear-gradient(150deg, #0D0D14 0%, #1A1024 100%)' },
-  { name: 'Coral Reef', css: 'radial-gradient(at 20% 30%, #FF8B94 0%, transparent 50%), radial-gradient(at 80% 25%, #FFC6C7 0%, transparent 50%), radial-gradient(at 65% 80%, #A0E7E5 0%, transparent 55%), linear-gradient(135deg, #FFF5F5 0%, #FFE3E3 100%)' },
-  { name: 'Midnight Teal', css: 'radial-gradient(at 25% 25%, #1FA971 0%, transparent 50%), radial-gradient(at 80% 30%, #0EA5A5 0%, transparent 50%), radial-gradient(at 60% 85%, #14141A 0%, transparent 60%), linear-gradient(160deg, #071B1A 0%, #0A2E2C 100%)' },
+  { name: 'Sunset Mesh', css: 'radial-gradient(circle, #FF6B6B 0%, #FFD93D 35%, #6C5CE7 70%, #2D1B4E 100%)' },
+  { name: 'Aurora', css: 'radial-gradient(circle, #00F5A0 0%, #00D9F5 30%, #6A5ACD 65%, #0B1120 100%)' },
+  { name: 'Citrus Bloom', css: 'conic-gradient(from 135deg, #FFE066 0%, #FF9F1C 35%, #FF5C8A 65%, #FFE066 100%)' },
+  { name: 'Deep Violet', css: 'radial-gradient(circle, #AD5BFC 0%, #6038EE 40%, #2B8FF5 70%, #0D0D14 100%)' },
+  { name: 'Coral Reef', css: 'linear-gradient(135deg, #FF8B94 0%, #FFC6C7 35%, #A0E7E5 70%, #FFF5F5 100%)' },
+  { name: 'Midnight Teal', css: 'radial-gradient(circle, #1FA971 0%, #0EA5A5 35%, #14141A 70%, #071B1A 100%)' },
+];
+
+// Stylized nature-toned gradients ("sceneries") built the same way -- one
+// parseable gradient each, evocative of a horizon/landscape's color grade.
+// Explicitly NOT real photography: this environment has no reachable,
+// legitimate photo source to pull real scenery images from, so these are
+// disclosed as stylized gradient backdrops rather than presented as photos.
+export const FREEFORM_SCENERY_PRESETS: { name: string; css: string }[] = [
+  { name: 'Ocean Horizon', css: 'linear-gradient(180deg, #BFEFFF 0%, #4FA8D8 45%, #0B4F6C 100%)' },
+  { name: 'Forest Canopy', css: 'linear-gradient(160deg, #DFF2C2 0%, #6FA85C 50%, #1F4D2E 100%)' },
+  { name: 'Golden Hour', css: 'linear-gradient(135deg, #FFE9C7 0%, #FFA45C 40%, #B5473A 75%, #3A1F3D 100%)' },
+  { name: 'Desert Dune', css: 'linear-gradient(160deg, #FDEBC8 0%, #E8A863 55%, #8C5A3C 100%)' },
+  { name: 'Alpine Dusk', css: 'radial-gradient(circle, #A7C6E8 0%, #5C7EA8 50%, #26314A 100%)' },
+  { name: 'Lavender Field', css: 'linear-gradient(150deg, #F0E4FF 0%, #B79CE8 50%, #5B4B8A 100%)' },
 ];
 
 export const FREEFORM_CANVAS_WIDTH = 1200;

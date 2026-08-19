@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../lib/store';
 import { TEMPLATE_CATEGORIES, TEMPLATES, TEMPLATE_QUERY } from '../lib/data';
 import { TemplateThumb } from '../components/TemplateThumb';
 
 export function Templates() {
   const { state, actions } = useApp();
+  const navigate = useNavigate();
   const [hover, setHover] = useState<string | null>(null);
   const filtered = state.templateFilter === 'All' ? TEMPLATES : TEMPLATES.filter((t) => t.cat === state.templateFilter);
 
@@ -104,11 +106,38 @@ export function Templates() {
                     inset: 0,
                     background: 'rgba(20,20,26,0.55)',
                     display: 'flex',
+                    flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
+                    gap: 8,
                     padding: 16,
                   }}
                 >
+                  {/* Real, full-module preview only exists for Feature Story
+                      right now -- the other 8 templates render through the
+                      shared frame loop and don't have an equivalent
+                      distinct render to preview yet, so no button is shown
+                      for them rather than one that goes nowhere real. */}
+                  {t.kind === 'feature-story' && (
+                    <button
+                      type="button"
+                      onClick={() => navigate('/templates/preview')}
+                      style={{
+                        width: '100%',
+                        height: 40,
+                        border: '1.5px solid #FFFFFF',
+                        borderRadius: 10,
+                        background: 'transparent',
+                        color: '#FFFFFF',
+                        fontFamily: "'Plus Jakarta Sans', sans-serif",
+                        fontWeight: 700,
+                        fontSize: 13.5,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Preview
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => actions.useTemplate(t.name)}

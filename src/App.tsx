@@ -18,6 +18,7 @@ import { TrashPage } from './pages/TrashPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { DashStub } from './pages/DashStub';
 import { Templates } from './pages/Templates';
+import { TemplatePreview } from './pages/TemplatePreview';
 import { Stub } from './pages/Stub';
 
 export default function App() {
@@ -26,6 +27,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/preview" element={<Preview />} />
+        <Route path="/templates/preview" element={<TemplatePreview />} />
         <Route element={<FlowLayout />}>
           <Route path="/create" element={<Create />} />
           <Route path="/waiting" element={<Waiting />} />

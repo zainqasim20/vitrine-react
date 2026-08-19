@@ -8,25 +8,97 @@ const FONT_STACK: Record<'display' | 'body' | 'mono', string> = {
   mono: "'Geist Mono', monospace",
 };
 
+const SNAP_THRESHOLD = 6;
+
+interface SnapGuides {
+  x: number | null;
+  y: number | null;
+}
+
+// Compares the moving element's edges/center against every other element on
+// the page and returns the closest within-threshold alignment on each axis,
+// plus the guide-line position to draw. Only used for single-element drags
+// (see startMove) -- snapping a whole multi-selected group against itself
+// doesn't have one unambiguous "moving edge" to compare, so groups move at
+// the raw pointer delta instead.
+function computeSnap(moving: { x: number; y: number; w: number; h: number }, others: FreeformElement[]): { dx: number; dy: number; guides: SnapGuides } {
+  const mLeft = moving.x;
+  const mRight = moving.x + moving.w;
+  const mCenterX = moving.x + moving.w / 2;
+  const mTop = moving.y;
+  const mBottom = moving.y + moving.h;
+  const mCenterY = moving.y + moving.h / 2;
+
+  let bestDx = 0;
+  let bestDxAbs = Infinity;
+  let guideX: number | null = null;
+  let bestDy = 0;
+  let bestDyAbs = Infinity;
+  let guideY: number | null = null;
+
+  for (const o of others) {
+    const oLeft = o.x;
+    const oRight = o.x + o.w;
+    const oCenterX = o.x + o.w / 2;
+    const oTop = o.y;
+    const oBottom = o.y + o.h;
+    const oCenterY = o.y + o.h / 2;
+
+    for (const [m, target] of [
+      [mLeft, oLeft],
+      [mCenterX, oCenterX],
+      [mRight, oRight],
+    ]) {
+      const d = target - m;
+      if (Math.abs(d) <= SNAP_THRESHOLD && Math.abs(d) < bestDxAbs) {
+        bestDxAbs = Math.abs(d);
+        bestDx = d;
+        guideX = target;
+      }
+    }
+    for (const [m, target] of [
+      [mTop, oTop],
+      [mCenterY, oCenterY],
+      [mBottom, oBottom],
+    ]) {
+      const d = target - m;
+      if (Math.abs(d) <= SNAP_THRESHOLD && Math.abs(d) < bestDyAbs) {
+        bestDyAbs = Math.abs(d);
+        bestDy = d;
+        guideY = target;
+      }
+    }
+  }
+
+  return { dx: bestDx, dy: bestDy, guides: { x: guideX, y: guideY } };
+}
+
 interface FreeformCanvasProps {
   page: FreeformPage;
-  selectedId: string | null;
-  onSelect: (id: string | null) => void;
+  selectedIds: string[];
+  onSelect: (id: string | null, additive?: boolean) => void;
   onPatch: (elementId: string, patch: Partial<FreeformElement>) => void;
-  onDelete: (elementId: string) => void;
+  onDelete: (elementIds: string[]) => void;
+  // Used by /preview to render the exact same doc with zero editing
+  // chrome/interactivity -- no drag/resize/select/replace/edit, just the
+  // final look. Reuses this component instead of a second renderer so the
+  // two can never drift out of sync with each other.
+  readOnly?: boolean;
 }
 
 // The core editing surface for /templates/customize -- a fixed-width
-// (FREEFORM_CANVAS_WIDTH) absolutely-positioned canvas, one per page. Every
-// element is independently selectable, draggable, and (for images) resizable
-// and replaceable, and text is edited in place via contentEditable. This is
+// (FREEFORM_CANVAS_WIDTH) absolutely-positioned canvas, one instance per
+// page (Customize.tsx mounts every page's canvas at once in a continuous
+// scroll, not one at a time). Every element is independently selectable,
+// draggable, and (for images) resizable and replaceable, text is edited in
+// place via contentEditable, shift-click multi-selects and drags/deletes as
+// a group, and single-element drags snap to nearby edges/centers. This is
 // deliberately NOT a scaled/zoomable viewport: interactions stay in real
-// pixel units to keep drag/resize math simple and reliable, and the
-// surrounding page (Customize.tsx) scrolls horizontally on narrow viewports
-// instead.
-export function FreeformCanvas({ page, selectedId, onSelect, onPatch, onDelete }: FreeformCanvasProps) {
+// pixel units to keep drag/resize/snap math simple and reliable.
+export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete, readOnly = false }: FreeformCanvasProps) {
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [replaceTargetId, setReplaceTargetId] = useState<string | null>(null);
+  const [guides, setGuides] = useState<SnapGuides>({ x: null, y: null });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editRef = useRef<HTMLDivElement>(null);
 
@@ -47,32 +119,57 @@ export function FreeformCanvas({ page, selectedId, onSelect, onPatch, onDelete }
   }, [page.elements, editingTextId]);
 
   useEffect(() => {
+    if (readOnly) return;
     function onKeyDown(e: KeyboardEvent) {
-      if (!selectedId || editingTextId) return;
+      const mine = selectedIds.filter((id) => page.elements.some((el) => el.id === id));
+      if (mine.length === 0 || editingTextId) return;
       if (e.key !== 'Delete' && e.key !== 'Backspace') return;
       const active = document.activeElement as HTMLElement | null;
       if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)) return;
       e.preventDefault();
-      onDelete(selectedId);
+      onDelete(mine);
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedId, editingTextId, onDelete]);
+  }, [readOnly, selectedIds, page.elements, editingTextId, onDelete]);
 
   function startMove(e: React.PointerEvent, el: FreeformElement) {
     if (editingTextId === el.id) return;
     e.stopPropagation();
-    onSelect(el.id);
+    const additive = e.shiftKey;
+    const alreadySelected = selectedIds.includes(el.id);
+
+    if (additive) {
+      onSelect(el.id, true);
+      if (alreadySelected) return; // shift-click on a selected item deselects it -- nothing to drag
+    } else if (!alreadySelected) {
+      onSelect(el.id, false);
+    }
+
+    const dragIds = additive ? [...selectedIds, el.id] : alreadySelected ? selectedIds : [el.id];
+    const group = page.elements.filter((e2) => dragIds.includes(e2.id));
+    const starts = group.map((e2) => ({ id: e2.id, x: e2.x, y: e2.y, w: e2.w, h: e2.h }));
+    const others = page.elements.filter((e2) => !dragIds.includes(e2.id));
+    const singleSnap = starts.length === 1;
+
     const sx = e.clientX;
     const sy = e.clientY;
-    const ox = el.x;
-    const oy = el.y;
     const mv = (ev: PointerEvent) => {
-      onPatch(el.id, { x: Math.round(ox + (ev.clientX - sx)), y: Math.round(oy + (ev.clientY - sy)) });
+      let dx = ev.clientX - sx;
+      let dy = ev.clientY - sy;
+      if (singleSnap) {
+        const s0 = starts[0];
+        const snap = computeSnap({ x: s0.x + dx, y: s0.y + dy, w: s0.w, h: s0.h }, others);
+        dx += snap.dx;
+        dy += snap.dy;
+        setGuides(snap.guides);
+      }
+      for (const s of starts) onPatch(s.id, { x: Math.round(s.x + dx), y: Math.round(s.y + dy) });
     };
     const up = () => {
       window.removeEventListener('pointermove', mv);
       window.removeEventListener('pointerup', up);
+      setGuides({ x: null, y: null });
     };
     window.addEventListener('pointermove', mv);
     window.addEventListener('pointerup', up);
@@ -117,12 +214,14 @@ export function FreeformCanvas({ page, selectedId, onSelect, onPatch, onDelete }
       style={{ position: 'relative', width: FREEFORM_CANVAS_WIDTH, height: page.height, background: page.backgroundColor, overflow: 'hidden', flex: 'none' }}
     >
       <input ref={fileInputRef} type="file" accept="image/*" onChange={onFileChosen} style={{ display: 'none' }} />
+      {guides.x !== null && <span style={{ position: 'absolute', left: guides.x, top: 0, bottom: 0, width: 1, background: 'var(--violet)', zIndex: 9999, pointerEvents: 'none' }} />}
+      {guides.y !== null && <span style={{ position: 'absolute', top: guides.y, left: 0, right: 0, height: 1, background: 'var(--violet)', zIndex: 9999, pointerEvents: 'none' }} />}
       {[...page.elements].sort((a, b) => a.zIndex - b.zIndex).map((el) => {
-        const selected = selectedId === el.id;
-        const wrapStyle: React.CSSProperties = { position: 'absolute', left: el.x, top: el.y, width: el.w, height: el.h, zIndex: el.zIndex, cursor: editingTextId === el.id ? 'text' : 'move' };
+        const selected = selectedIds.includes(el.id);
+        const wrapStyle: React.CSSProperties = { position: 'absolute', left: el.x, top: el.y, width: el.w, height: el.h, zIndex: el.zIndex, cursor: readOnly ? 'default' : editingTextId === el.id ? 'text' : 'move' };
 
         return (
-          <div key={el.id} style={wrapStyle} onPointerDown={(e) => startMove(e, el)} onClick={(e) => e.stopPropagation()}>
+          <div key={el.id} style={wrapStyle} onPointerDown={readOnly ? undefined : (e) => startMove(e, el)} onClick={(e) => e.stopPropagation()}>
             {el.type === 'text' &&
               (editingTextId === el.id ? (
                 <div
@@ -155,10 +254,14 @@ export function FreeformCanvas({ page, selectedId, onSelect, onPatch, onDelete }
                 </div>
               ) : (
                 <div
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    setEditingTextId(el.id);
-                  }}
+                  onDoubleClick={
+                    readOnly
+                      ? undefined
+                      : (e) => {
+                          e.stopPropagation();
+                          setEditingTextId(el.id);
+                        }
+                  }
                   style={{
                     width: '100%',
                     height: '100%',
@@ -239,10 +342,12 @@ export function FreeformCanvas({ page, selectedId, onSelect, onPatch, onDelete }
                     Replace image
                   </button>
                 )}
-                <span
-                  onPointerDown={(e) => startResize(e, el)}
-                  style={{ position: 'absolute', right: -6, bottom: -6, width: 12, height: 12, border: '1.5px solid var(--violet)', borderRadius: 3, background: '#FFFFFF', cursor: 'nwse-resize' }}
-                />
+                {selectedIds.length === 1 && (
+                  <span
+                    onPointerDown={(e) => startResize(e, el)}
+                    style={{ position: 'absolute', right: -6, bottom: -6, width: 12, height: 12, border: '1.5px solid var(--violet)', borderRadius: 3, background: '#FFFFFF', cursor: 'nwse-resize' }}
+                  />
+                )}
               </>
             )}
           </div>

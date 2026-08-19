@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../lib/store';
-import type { CanvasSection, SceneTreatment } from '../lib/types';
+import type { AppState, CanvasSection, SceneTreatment } from '../lib/types';
 import type { ImageFeatureRecord } from '../lib/pipeline/types';
 import { NarrationIntro } from '../components/NarrationIntro';
 import { deviceFrameBoxStyle, deviceFrameKindFor, DeviceChrome } from '../components/DeviceFrame';
 import { GeneratedFrameArt } from '../components/GeneratedFrameArt';
+import { FreeformCanvas } from '../components/customize/FreeformCanvas';
 
 // Real, public case-study preview -- ported from the live site's
 // renderPreview()/renderPreviewSection() family. Reads the same
@@ -34,9 +35,44 @@ const THEMES: Array<{ key: 'minimal' | 'editorial' | 'bold' | 'playful'; label: 
   { key: 'playful', label: 'Playful', swatch: '#FF6F91', accent: '#FF6F91', heading: "'Bricolage Grotesque', sans-serif", bodyFont: "'Plus Jakarta Sans', sans-serif" },
 ];
 
+// Feature Story's real, editable draft (built in /templates/customize) gets
+// its own preview render here rather than reusing the frames-pipeline
+// preview below -- there's no canvasSections()/scene treatment for it, and
+// its look is already fully determined by the freeform doc itself (every
+// page has its own real background/colors), so there's no theme/layout
+// picker to offer. Reuses FreeformCanvas in readOnly mode -- the exact same
+// renderer Customize.tsx edits with -- so this can never drift from what
+// was actually built.
+function FreeformPreview({ state }: { state: AppState }) {
+  const pages = state.freeform?.pages ?? [];
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--text)' }}>
+      <header style={{ position: 'sticky', top: 0, zIndex: 5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '14px 24px', background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
+        <Link to="/templates/customize" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-2)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 13.5, textDecoration: 'none' }}>
+          <i className="ph ph-arrow-left" style={{ fontSize: 15 }} />
+          Back to editing
+        </Link>
+        <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 11.5, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--text-3)' }}>Preview · read-only</span>
+      </header>
+      {/* flex-start, not center -- see the same reasoning in
+          Customize.tsx's main canvas area: centering a fixed-1200px
+          element that's wider than the viewport clips it symmetrically
+          with the left edge unreachable by scrolling. */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', overflowX: 'auto' }}>
+        {pages.map((p) => (
+          <FreeformCanvas key={p.id} page={p} selectedIds={[]} onSelect={() => {}} onPatch={() => {}} onDelete={() => {}} readOnly />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function Preview() {
   const { state, actions } = useApp();
   const navigate = useNavigate();
+
+  if (state.templateMode === 'feature-story' && state.freeform) return <FreeformPreview state={state} />;
+
   const sections = actions.canvasSections();
   // Same real Scene Construction Framework treatment as Refine's canvas --
   // computed once from the project's own real colors/category and reused

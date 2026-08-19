@@ -221,7 +221,9 @@ const initialState: AppState = {
   templateMode: 'frames',
   freeform: null,
   freeformActivePageId: null,
-  freeformSelectedId: null,
+  freeformSelectedIds: [],
+  freeformCanUndo: false,
+  freeformCanRedo: false,
 
   vCount: 5,
   variants: [],
@@ -533,12 +535,14 @@ export interface AppActions {
   setTemplateFilter: (v: string) => void;
   useTemplate: (name: string) => void;
 
-  selectFreeform: (id: string | null) => void;
+  selectFreeform: (pageId: string, id: string | null, additive?: boolean) => void;
   setActiveFreeformPage: (pageId: string) => void;
   patchFreeformElement: (pageId: string, elementId: string, patch: Partial<FreeformElement>) => void;
   removeFreeformElement: (pageId: string, elementId: string) => void;
+  removeFreeformElements: (pageId: string, elementIds: string[]) => void;
   addFreeformElement: (pageId: string, type: FreeformElementType) => void;
   duplicateFreeformElement: (pageId: string, elementId: string) => void;
+  duplicateFreeformElements: (pageId: string, elementIds: string[]) => void;
   addFreeformPage: () => void;
   duplicateFreeformPage: (pageId: string) => void;
   removeFreeformPage: (pageId: string) => void;
@@ -546,6 +550,8 @@ export interface AppActions {
   renameFreeformPage: (pageId: string, name: string) => void;
   setFreeformPageBackground: (pageId: string, hex: string) => void;
   setFreeformPageHeight: (pageId: string, height: number) => void;
+  undoFreeform: () => void;
+  redoFreeform: () => void;
 
   getStockPhoto: (query: string) => StockPhotoEntry;
   fetchStockPhoto: (query: string) => void;
@@ -1633,7 +1639,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       patch({ templateMode: isFeatureStory ? 'feature-story' : 'frames' });
       if (isFeatureStory) {
         const pages = buildFeatureStoryFreeformPages();
-        patch({ freeform: { pages }, freeformActivePageId: pages[0]?.id ?? null, freeformSelectedId: null });
+        freeformHistoryRef.current = { past: [], future: [], lastPushAt: 0 };
+        patch({ freeform: { pages }, freeformActivePageId: pages[0]?.id ?? null, freeformSelectedIds: [], freeformCanUndo: false, freeformCanRedo: false });
         say(`"${name}" applied — customize it below`);
         navigate('/templates/customize');
         return;
@@ -1644,12 +1651,89 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [patch, say, navigate],
   );
 
-  const selectFreeform = useCallback((id: string | null) => patch({ freeformSelectedId: id }), [patch]);
+  // Undo/redo history for the freeform doc, kept in a ref rather than
+  // AppState -- it doesn't need to trigger renders itself, only the
+  // freeform swap it produces does. Snapshots the doc as it stood *before*
+  // a mutation, coalesced: rapid-fire calls from one continuous gesture
+  // (dragging, typing in a hex field, sliding opacity) land within the
+  // same window and don't each get their own undo step -- only the first
+  // call after a quiet period snapshots, so one drag/type/slide is one
+  // undo step, not one per pointermove/keystroke. freeformCanUndo/Redo
+  // mirror the ref's lengths into real state so buttons can reflect them.
+  const freeformHistoryRef = useRef<{ past: FreeformDoc[]; future: FreeformDoc[]; lastPushAt: number }>({ past: [], future: [], lastPushAt: 0 });
+  const FREEFORM_HISTORY_COALESCE_MS = 500;
+  const FREEFORM_HISTORY_LIMIT = 40;
 
-  const setActiveFreeformPage = useCallback((pageId: string) => patch({ freeformActivePageId: pageId, freeformSelectedId: null }), [patch]);
+  function snapshotFreeformHistory() {
+    const current = stateRef.current.freeform;
+    if (!current) return;
+    const h = freeformHistoryRef.current;
+    const now = Date.now();
+    if (now - h.lastPushAt >= FREEFORM_HISTORY_COALESCE_MS) {
+      h.past.push(current);
+      if (h.past.length > FREEFORM_HISTORY_LIMIT) h.past.shift();
+      h.future = [];
+    }
+    h.lastPushAt = now;
+    patch({ freeformCanUndo: h.past.length > 0, freeformCanRedo: h.future.length > 0 });
+  }
+
+  const undoFreeform = useCallback(() => {
+    const h = freeformHistoryRef.current;
+    const prev = h.past.pop();
+    if (!prev) return;
+    const current = stateRef.current.freeform;
+    if (current) h.future.push(current);
+    h.lastPushAt = 0;
+    patch((s) => ({
+      freeform: prev,
+      freeformSelectedIds: [],
+      freeformActivePageId: prev.pages.some((p) => p.id === s.freeformActivePageId) ? s.freeformActivePageId : prev.pages[0]?.id ?? null,
+      freeformCanUndo: h.past.length > 0,
+      freeformCanRedo: h.future.length > 0,
+    }));
+  }, [patch]);
+
+  const redoFreeform = useCallback(() => {
+    const h = freeformHistoryRef.current;
+    const next = h.future.pop();
+    if (!next) return;
+    const current = stateRef.current.freeform;
+    if (current) h.past.push(current);
+    h.lastPushAt = 0;
+    patch((s) => ({
+      freeform: next,
+      freeformSelectedIds: [],
+      freeformActivePageId: next.pages.some((p) => p.id === s.freeformActivePageId) ? s.freeformActivePageId : next.pages[0]?.id ?? null,
+      freeformCanUndo: h.past.length > 0,
+      freeformCanRedo: h.future.length > 0,
+    }));
+  }, [patch]);
+
+  // additive (shift-click) toggles id in/out of the selection. Multi-select
+  // is scoped to one page: shift-clicking an element on a different page
+  // than the current selection starts a fresh single selection there
+  // instead of mixing elements from two different coordinate spaces.
+  const selectFreeform = useCallback(
+    (pageId: string, id: string | null, additive = false) => {
+      patch((s) => {
+        if (id === null) return { freeformSelectedIds: [] };
+        if (!additive) return { freeformSelectedIds: [id] };
+        const owningPageId = (elId: string) => s.freeform?.pages.find((p) => p.elements.some((e) => e.id === elId))?.id;
+        const currentPageId = s.freeformSelectedIds[0] ? owningPageId(s.freeformSelectedIds[0]) : null;
+        if (currentPageId && currentPageId !== pageId) return { freeformSelectedIds: [id] };
+        const has = s.freeformSelectedIds.includes(id);
+        return { freeformSelectedIds: has ? s.freeformSelectedIds.filter((x) => x !== id) : [...s.freeformSelectedIds, id] };
+      });
+    },
+    [patch],
+  );
+
+  const setActiveFreeformPage = useCallback((pageId: string) => patch({ freeformActivePageId: pageId }), [patch]);
 
   const patchFreeformElement = useCallback(
     (pageId: string, elementId: string, elPatch: Partial<FreeformElement>) => {
+      snapshotFreeformHistory();
       patch((s) => ({
         freeform: mapFreeformPage(s.freeform, pageId, (p) => ({
           ...p,
@@ -1662,9 +1746,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const removeFreeformElement = useCallback(
     (pageId: string, elementId: string) => {
+      snapshotFreeformHistory();
       patch((s) => ({
         freeform: mapFreeformPage(s.freeform, pageId, (p) => ({ ...p, elements: p.elements.filter((el) => el.id !== elementId) })),
-        freeformSelectedId: s.freeformSelectedId === elementId ? null : s.freeformSelectedId,
+        freeformSelectedIds: s.freeformSelectedIds.filter((id) => id !== elementId),
+      }));
+    },
+    [patch],
+  );
+
+  const removeFreeformElements = useCallback(
+    (pageId: string, elementIds: string[]) => {
+      snapshotFreeformHistory();
+      const idSet = new Set(elementIds);
+      patch((s) => ({
+        freeform: mapFreeformPage(s.freeform, pageId, (p) => ({ ...p, elements: p.elements.filter((el) => !idSet.has(el.id)) })),
+        freeformSelectedIds: s.freeformSelectedIds.filter((id) => !idSet.has(id)),
       }));
     },
     [patch],
@@ -1672,6 +1769,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addFreeformElement = useCallback(
     (pageId: string, type: FreeformElementType) => {
+      snapshotFreeformHistory();
       patch((s) => {
         const page = s.freeform?.pages.find((p) => p.id === pageId);
         if (!page) return {};
@@ -1690,7 +1788,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
         return {
           freeform: mapFreeformPage(s.freeform, pageId, (p) => ({ ...p, elements: [...p.elements, el] })),
-          freeformSelectedId: el.id,
+          freeformSelectedIds: [el.id],
         };
       });
     },
@@ -1699,6 +1797,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const duplicateFreeformElement = useCallback(
     (pageId: string, elementId: string) => {
+      snapshotFreeformHistory();
       patch((s) => {
         const page = s.freeform?.pages.find((p) => p.id === pageId);
         const el = page?.elements.find((e) => e.id === elementId);
@@ -1707,7 +1806,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const copy: FreeformElement = { ...el, id: freeformId(el.type), x: el.x + 20, y: el.y + 20, zIndex: z };
         return {
           freeform: mapFreeformPage(s.freeform, pageId, (p) => ({ ...p, elements: [...p.elements, copy] })),
-          freeformSelectedId: copy.id,
+          freeformSelectedIds: [copy.id],
+        };
+      });
+    },
+    [patch],
+  );
+
+  const duplicateFreeformElements = useCallback(
+    (pageId: string, elementIds: string[]) => {
+      snapshotFreeformHistory();
+      patch((s) => {
+        const page = s.freeform?.pages.find((p) => p.id === pageId);
+        if (!page) return {};
+        const idSet = new Set(elementIds);
+        let z = freeformMaxZ(page.elements);
+        const copies: FreeformElement[] = page.elements
+          .filter((el) => idSet.has(el.id))
+          .map((el) => {
+            z += 1;
+            return { ...el, id: freeformId(el.type), x: el.x + 20, y: el.y + 20, zIndex: z };
+          });
+        return {
+          freeform: mapFreeformPage(s.freeform, pageId, (p) => ({ ...p, elements: [...p.elements, ...copies] })),
+          freeformSelectedIds: copies.map((c) => c.id),
         };
       });
     },
@@ -1715,15 +1837,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const addFreeformPage = useCallback(() => {
+    snapshotFreeformHistory();
     patch((s) => {
       if (!s.freeform) return {};
       const newPage: FreeformPage = { id: freeformId('page'), name: `Page ${s.freeform.pages.length + 1}`, backgroundColor: '#FFFFFF', height: 400, elements: [] };
-      return { freeform: { pages: [...s.freeform.pages, newPage] }, freeformActivePageId: newPage.id, freeformSelectedId: null };
+      return { freeform: { pages: [...s.freeform.pages, newPage] }, freeformActivePageId: newPage.id, freeformSelectedIds: [] };
     });
   }, [patch]);
 
   const duplicateFreeformPage = useCallback(
     (pageId: string) => {
+      snapshotFreeformHistory();
       patch((s) => {
         if (!s.freeform) return {};
         const idx = s.freeform.pages.findIndex((p) => p.id === pageId);
@@ -1732,7 +1856,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const copy: FreeformPage = { ...src, id: freeformId('page'), name: `${src.name} copy`, elements: src.elements.map((el) => ({ ...el, id: freeformId(el.type) })) };
         const pages = [...s.freeform.pages];
         pages.splice(idx + 1, 0, copy);
-        return { freeform: { pages }, freeformActivePageId: copy.id, freeformSelectedId: null };
+        return { freeform: { pages }, freeformActivePageId: copy.id, freeformSelectedIds: [] };
       });
     },
     [patch],
@@ -1742,11 +1866,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // customize or land on, so the last page can't be removed.
   const removeFreeformPage = useCallback(
     (pageId: string) => {
+      snapshotFreeformHistory();
       patch((s) => {
         if (!s.freeform || s.freeform.pages.length <= 1) return {};
         const pages = s.freeform.pages.filter((p) => p.id !== pageId);
         const freeformActivePageId = s.freeformActivePageId === pageId ? pages[0]?.id ?? null : s.freeformActivePageId;
-        return { freeform: { pages }, freeformActivePageId, freeformSelectedId: null };
+        return { freeform: { pages }, freeformActivePageId, freeformSelectedIds: [] };
       });
     },
     [patch],
@@ -1754,6 +1879,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const reorderFreeformPages = useCallback(
     (fromIndex: number, toIndex: number) => {
+      snapshotFreeformHistory();
       patch((s) => {
         if (!s.freeform) return {};
         const pages = [...s.freeform.pages];
@@ -1768,6 +1894,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const renameFreeformPage = useCallback(
     (pageId: string, name: string) => {
+      snapshotFreeformHistory();
       patch((s) => ({ freeform: mapFreeformPage(s.freeform, pageId, (p) => ({ ...p, name })) }));
     },
     [patch],
@@ -1775,6 +1902,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const setFreeformPageBackground = useCallback(
     (pageId: string, hex: string) => {
+      snapshotFreeformHistory();
       patch((s) => ({ freeform: mapFreeformPage(s.freeform, pageId, (p) => ({ ...p, backgroundColor: hex })) }));
     },
     [patch],
@@ -1782,6 +1910,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const setFreeformPageHeight = useCallback(
     (pageId: string, height: number) => {
+      snapshotFreeformHistory();
       patch((s) => ({ freeform: mapFreeformPage(s.freeform, pageId, (p) => ({ ...p, height: Math.max(120, Math.round(height)) })) }));
     },
     [patch],
@@ -2367,8 +2496,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setActiveFreeformPage,
     patchFreeformElement,
     removeFreeformElement,
+    removeFreeformElements,
     addFreeformElement,
     duplicateFreeformElement,
+    duplicateFreeformElements,
     addFreeformPage,
     duplicateFreeformPage,
     removeFreeformPage,
@@ -2376,6 +2507,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     renameFreeformPage,
     setFreeformPageBackground,
     setFreeformPageHeight,
+    undoFreeform,
+    redoFreeform,
     getStockPhoto,
     fetchStockPhoto,
     sceneTreatment,

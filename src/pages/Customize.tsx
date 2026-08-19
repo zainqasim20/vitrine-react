@@ -1,21 +1,22 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../lib/store';
 import { Logo } from '../components/Logo';
 import { FreeformCanvas } from '../components/customize/FreeformCanvas';
-import type { FreeformElementType } from '../lib/templates/freeform-types';
+import type { FreeformElement, FreeformElementType, FreeformPage } from '../lib/templates/freeform-types';
 
 function mono(): React.CSSProperties {
   return { fontFamily: "'Geist Mono', monospace", fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--text-3)' };
 }
 
-function IconBtn({ icon, title, onClick, danger }: { icon: string; title: string; onClick: (e: React.MouseEvent) => void; danger?: boolean }) {
+function IconBtn({ icon, title, onClick, danger, disabled }: { icon: string; title: string; onClick: (e: React.MouseEvent) => void; danger?: boolean; disabled?: boolean }) {
   return (
     <button
       type="button"
       title={title}
       onClick={onClick}
-      style={{ width: 26, height: 26, border: 0, borderRadius: 7, background: 'transparent', color: danger ? 'var(--error)' : 'var(--text-3)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+      disabled={disabled}
+      style={{ width: 26, height: 26, border: 0, borderRadius: 7, background: 'transparent', color: disabled ? 'var(--border-strong)' : danger ? 'var(--error)' : 'var(--text-3)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: disabled ? 'default' : 'pointer' }}
     >
       <i className={icon} style={{ fontSize: 14 }} />
     </button>
@@ -62,24 +63,93 @@ const ADD_TOOLS: { type: FreeformElementType; icon: string; label: string }[] = 
   { type: 'button', icon: 'ph ph-cursor-click', label: 'Button' },
 ];
 
-// /templates/customize -- the real editable draft the user asked for:
-// "give a rough draft that he can use to customize his portfolio". Reached
-// straight from "Use template" for Feature Story (see useTemplate() in
-// store.tsx), seeded from buildFeatureStoryFreeformPages(). Every element on
-// every page is a genuinely independent, draggable/resizable/editable/
-// deletable object -- not a fixed module rendering, which is what Refine's
-// existing Feature Story canvas still is (explicitly labeled read-only
-// there). Phase 1 of this: move/resize/edit text/replace image/delete/add
-// element, plus add/duplicate/delete/reorder/rename pages and per-page
-// background color. Not yet built (flagged, not silently missing): undo/
-// redo, multi-select, alignment guides/snapping, and publishing this draft
-// into the rest of the pipeline (Preview/Publish) -- this is a standalone
-// editing surface for now.
+function findFreeformElement(pages: FreeformPage[], id: string): { page: FreeformPage; el: FreeformElement } | null {
+  for (const p of pages) {
+    const el = p.elements.find((e) => e.id === id);
+    if (el) return { page: p, el };
+  }
+  return null;
+}
+
+// /templates/customize -- the real editable draft the user asked for, laid
+// out as one continuous scroll (all pages render at once, stacked, like the
+// actual published case study would read) instead of an exclusive
+// one-page-at-a-time view -- switching pages used to hide every other page,
+// which broke the sense that this is one flowing document. The Pages
+// sidebar now scrolls to a page rather than swapping to it, and a
+// scroll-spy (below) tracks whichever page is currently in view to decide
+// what the "+ element" toolbar and page-background panel act on.
+//
+// Every element is independently draggable/resizable/editable/deletable;
+// shift-click multi-selects and drags/deletes as a group; single-element
+// drags snap to nearby edges/centers; Ctrl/Cmd+Z and Shift+Ctrl/Cmd+Z
+// undo/redo. Not yet built: this draft doesn't feed into Publish's actual
+// downloadable HTML export yet -- see /preview for the read-only render of
+// it, which does work end to end.
 export function Customize() {
   const { state, actions } = useApp();
   const navigate = useNavigate();
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [renamingPageId, setRenamingPageId] = useState<string | null>(null);
+  const mainRef = useRef<HTMLElement>(null);
+  const pageRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const pages = state.freeform?.pages ?? [];
+  const pageIdsKey = pages.map((p) => p.id).join(',');
+
+  // Scroll-spy: whichever page's top is closest to a line just below the
+  // header becomes "active" -- drives the toolbar's add-target and the
+  // background panel when nothing is selected. rAF-throttled scroll
+  // listener rather than IntersectionObserver, since the page set changes
+  // (add/duplicate/delete) and re-wiring an observer's targets each time is
+  // more moving parts than re-reading refs on scroll.
+  useEffect(() => {
+    const container = mainRef.current;
+    if (!container || pages.length === 0) return;
+    let raf = 0;
+    function onScroll() {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const containerTop = container!.getBoundingClientRect().top;
+        let bestId: string | null = null;
+        let bestDist = Infinity;
+        for (const p of pages) {
+          const el = pageRefs.current[p.id];
+          if (!el) continue;
+          const dist = Math.abs(el.getBoundingClientRect().top - containerTop - 40);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestId = p.id;
+          }
+        }
+        if (bestId) actions.setActiveFreeformPage(bestId);
+      });
+    }
+    container.addEventListener('scroll', onScroll);
+    onScroll();
+    return () => {
+      container.removeEventListener('scroll', onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageIdsKey]);
+
+  // Ctrl/Cmd+Z undo, Shift+Ctrl/Cmd+Z redo -- ignored while focus is in a
+  // text input/textarea/contentEditable so it doesn't fight the browser's
+  // own native undo inside that field.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z') return;
+      const active = document.activeElement as HTMLElement | null;
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)) return;
+      e.preventDefault();
+      if (e.shiftKey) actions.redoFreeform();
+      else actions.undoFreeform();
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [actions]);
 
   if (!state.freeform || state.freeform.pages.length === 0) {
     return (
@@ -100,13 +170,17 @@ export function Customize() {
     );
   }
 
-  const { pages } = state.freeform;
   const activePageId = state.freeformActivePageId && pages.some((p) => p.id === state.freeformActivePageId) ? state.freeformActivePageId : pages[0].id;
   const activePage = pages.find((p) => p.id === activePageId)!;
-  const selected = state.freeformSelectedId ? activePage.elements.find((el) => el.id === state.freeformSelectedId) || null : null;
+
+  const selectedIds = state.freeformSelectedIds;
+  const selectedEntries = selectedIds.map((id) => findFreeformElement(pages, id)).filter((x): x is { page: FreeformPage; el: FreeformElement } => x !== null);
+  const selectedPage = selectedEntries[0]?.page ?? activePage;
+  const selected = selectedEntries.length === 1 ? selectedEntries[0].el : null;
+  const multiCount = selectedEntries.length;
 
   function patchSelected(patch: Record<string, unknown>) {
-    if (selected) actions.patchFreeformElement(activePage.id, selected.id, patch);
+    if (selected) actions.patchFreeformElement(selectedPage.id, selected.id, patch);
   }
 
   return (
@@ -120,13 +194,27 @@ export function Customize() {
           </Link>
         </div>
         <span style={mono()}>Customizing · Feature Story</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2, borderRight: '1px solid var(--border)', paddingRight: 10, marginRight: 2 }}>
+            <IconBtn icon="ph ph-arrow-counter-clockwise" title="Undo (Ctrl/Cmd+Z)" disabled={!state.freeformCanUndo} onClick={() => actions.undoFreeform()} />
+            <IconBtn icon="ph ph-arrow-clockwise" title="Redo (Shift+Ctrl/Cmd+Z)" disabled={!state.freeformCanRedo} onClick={() => actions.redoFreeform()} />
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/preview')}
+            title="See the read-only final look"
+            style={{ height: 34, padding: '0 12px', border: '1px solid var(--border)', borderRadius: 8, background: 'transparent', color: 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 12.5, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            <i className="ph ph-eye" style={{ fontSize: 14 }} />
+            Preview
+          </button>
+          <span style={{ width: 1, height: 20, background: 'var(--border)' }} />
           {ADD_TOOLS.map((t) => (
             <button
               key={t.type}
               type="button"
               onClick={() => actions.addFreeformElement(activePage.id, t.type)}
-              title={`Add ${t.label.toLowerCase()}`}
+              title={`Add ${t.label.toLowerCase()} to "${activePage.name}"`}
               style={{ height: 34, padding: '0 12px', border: '1px solid var(--border)', borderRadius: 8, background: 'transparent', color: 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 12.5, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
             >
               <i className={t.icon} style={{ fontSize: 14 }} />
@@ -155,7 +243,10 @@ export function Customize() {
                     if (dragIndex !== null && dragIndex !== i) actions.reorderFreeformPages(dragIndex, i);
                     setDragIndex(null);
                   }}
-                  onClick={() => actions.setActiveFreeformPage(p.id)}
+                  onClick={() => {
+                    actions.setActiveFreeformPage(p.id);
+                    pageRefs.current[p.id]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -209,15 +300,40 @@ export function Customize() {
           </div>
         </aside>
 
-        <main style={{ flex: 1, overflow: 'auto', background: 'var(--surface-3)', padding: 32, display: 'flex', justifyContent: 'center' }}>
-          <div style={{ boxShadow: 'var(--shadow-lg)', flex: 'none' }}>
-            <FreeformCanvas
-              page={activePage}
-              selectedId={state.freeformSelectedId}
-              onSelect={actions.selectFreeform}
-              onPatch={(id, patch) => actions.patchFreeformElement(activePage.id, id, patch)}
-              onDelete={(id) => actions.removeFreeformElement(activePage.id, id)}
-            />
+        <main ref={mainRef} style={{ flex: 1, overflow: 'auto', background: 'var(--surface-3)', padding: '32px 32px 96px' }}>
+          {/* alignItems: flex-start, not center -- the canvas is a fixed
+              1200px and the two sidebars can leave less room than that at
+              common viewport widths. Centering an overflowing flex item
+              clips it symmetrically with no way to scroll back to the
+              hidden left edge; left-aligning keeps x=0 (where most of a
+              page's important content sits, e.g. Cover's PRODUCTS label)
+              always reachable at scrollLeft 0, with the rest a normal
+              rightward scroll away. */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 28 }}>
+            {pages.map((p, i) => (
+              <div
+                key={p.id}
+                ref={(el) => {
+                  pageRefs.current[p.id] = el;
+                }}
+                style={{ flex: 'none' }}
+              >
+                <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={mono()}>
+                    {i + 1} · {p.name}
+                  </span>
+                </div>
+                <div style={{ boxShadow: 'var(--shadow-lg)' }}>
+                  <FreeformCanvas
+                    page={p}
+                    selectedIds={selectedIds}
+                    onSelect={(id, additive) => actions.selectFreeform(p.id, id, additive)}
+                    onPatch={(id, patch) => actions.patchFreeformElement(p.id, id, patch)}
+                    onDelete={(ids) => actions.removeFreeformElements(p.id, ids)}
+                  />
+                </div>
+              </div>
+            ))}
           </div>
         </main>
 
@@ -227,18 +343,18 @@ export function Customize() {
               reaches the topmost one at that point, same as any layered
               editor. This list is the way to reach whatever's underneath. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <span style={mono()}>Layers</span>
+            <span style={mono()}>Layers · {activePage.name}</span>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 180, overflowY: 'auto' }}>
               {[...activePage.elements]
                 .sort((a, b) => b.zIndex - a.zIndex)
                 .map((el) => {
-                  const active = el.id === state.freeformSelectedId;
+                  const active = selectedIds.includes(el.id);
                   const icon = el.type === 'text' ? 'ph ph-text-t' : el.type === 'image' ? 'ph ph-image' : el.type === 'shape' ? 'ph ph-square' : 'ph ph-cursor-click';
                   const label = el.type === 'text' ? el.text.slice(0, 30) || 'Text' : el.type === 'button' ? el.text : el.type.charAt(0).toUpperCase() + el.type.slice(1);
                   return (
                     <div
                       key={el.id}
-                      onClick={() => actions.selectFreeform(el.id)}
+                      onClick={(e) => actions.selectFreeform(activePage.id, el.id, e.shiftKey)}
                       style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 7, cursor: 'pointer', background: active ? 'var(--violet-light)' : 'transparent' }}
                     >
                       <i className={icon} style={{ fontSize: 13, color: active ? 'var(--violet-deep)' : 'var(--text-3)', flex: 'none' }} />
@@ -249,7 +365,19 @@ export function Customize() {
             </div>
           </div>
           <div style={{ height: 1, background: 'var(--border)' }} />
-          {selected ? (
+
+          {multiCount > 1 ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={mono()}>{multiCount} elements</span>
+                <div style={{ display: 'flex', gap: 2 }}>
+                  <IconBtn icon="ph ph-copy" title="Duplicate group" onClick={() => actions.duplicateFreeformElements(selectedPage.id, selectedIds)} />
+                  <IconBtn icon="ph ph-trash" title="Delete group" danger onClick={() => actions.removeFreeformElements(selectedPage.id, selectedIds)} />
+                </div>
+              </div>
+              <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: 'var(--text-3)' }}>Shift-click to add or remove elements from the selection. Drag any of them to move the whole group.</p>
+            </>
+          ) : selected ? (
             <>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={mono()}>{selected.type}</span>
@@ -257,15 +385,15 @@ export function Customize() {
                   <IconBtn
                     icon="ph ph-arrow-line-up"
                     title="Bring to front"
-                    onClick={() => patchSelected({ zIndex: Math.max(...activePage.elements.map((e) => e.zIndex)) + 1 })}
+                    onClick={() => patchSelected({ zIndex: Math.max(...selectedPage.elements.map((e) => e.zIndex)) + 1 })}
                   />
                   <IconBtn
                     icon="ph ph-arrow-line-down"
                     title="Send to back"
-                    onClick={() => patchSelected({ zIndex: Math.min(...activePage.elements.map((e) => e.zIndex)) - 1 })}
+                    onClick={() => patchSelected({ zIndex: Math.min(...selectedPage.elements.map((e) => e.zIndex)) - 1 })}
                   />
-                  <IconBtn icon="ph ph-copy" title="Duplicate" onClick={() => actions.duplicateFreeformElement(activePage.id, selected.id)} />
-                  <IconBtn icon="ph ph-trash" title="Delete" danger onClick={() => actions.removeFreeformElement(activePage.id, selected.id)} />
+                  <IconBtn icon="ph ph-copy" title="Duplicate" onClick={() => actions.duplicateFreeformElement(selectedPage.id, selected.id)} />
+                  <IconBtn icon="ph ph-trash" title="Delete" danger onClick={() => actions.removeFreeformElement(selectedPage.id, selected.id)} />
                 </div>
               </div>
 
@@ -368,7 +496,9 @@ export function Customize() {
               <span style={mono()}>Page background</span>
               <ColorField label="Color" value={activePage.backgroundColor} onChange={(hex) => actions.setFreeformPageBackground(activePage.id, hex)} />
               <NumberField label="Page height" value={activePage.height} min={120} max={4000} onChange={(height) => actions.setFreeformPageHeight(activePage.id, height)} />
-              <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: 'var(--text-3)' }}>Click any element on the canvas to select it. Drag to move, drag the bottom-right handle to resize, double-click text to edit.</p>
+              <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: 'var(--text-3)' }}>
+                Click any element to select it, shift-click to select more than one. Drag to move (snaps to nearby edges), drag the bottom-right handle to resize, double-click text to edit.
+              </p>
             </>
           )}
         </aside>

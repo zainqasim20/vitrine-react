@@ -149,8 +149,16 @@ export interface AppState {
   // null until a template seeds it (useTemplate()); persists across
   // navigation within the session same as everything else in this context.
   freeform: FreeformDoc | null;
+  // Which page's toolbar/background panel is "in focus" -- driven by
+  // scroll position in the continuous-scroll canvas (all pages render at
+  // once now, not one-at-a-time), not by an exclusive open/closed view.
   freeformActivePageId: string | null;
-  freeformSelectedId: string | null;
+  // Multi-select: shift-click adds/removes an id. Selection is scoped to
+  // one page at a time (selecting on a different page starts a fresh
+  // single selection there) -- see selectFreeform() in store.tsx.
+  freeformSelectedIds: string[];
+  freeformCanUndo: boolean;
+  freeformCanRedo: boolean;
 
   vCount: number;
   variants: VariantSlot[];

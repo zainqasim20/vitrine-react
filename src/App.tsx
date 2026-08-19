@@ -19,6 +19,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { DashStub } from './pages/DashStub';
 import { Templates } from './pages/Templates';
 import { TemplatePreview } from './pages/TemplatePreview';
+import { Customize } from './pages/Customize';
 import { Stub } from './pages/Stub';
 
 export default function App() {
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/preview" element={<Preview />} />
         <Route path="/templates/preview" element={<TemplatePreview />} />
+        <Route path="/templates/customize" element={<Customize />} />
         <Route element={<FlowLayout />}>
           <Route path="/create" element={<Create />} />
           <Route path="/waiting" element={<Waiting />} />

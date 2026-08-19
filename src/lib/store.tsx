@@ -12,6 +12,24 @@ import categorySignals from './pipeline/config/category-signals.json';
 import moduleSequences from './pipeline/config/module-sequences.json';
 import type { ApprovedSection, CategorySignalsConfig, DesignSystemColor, DesignSystemSheet, ModuleSequencesConfig, PresentFrame } from './pipeline/types';
 import type { Caption, CanvasSection, ClientStatus, ProjectRecord, ProjectSnapshot, SceneTreatment, StockPhotoEntry } from './types';
+import { buildFeatureStoryFreeformPages } from './templates/freeform-seed';
+import { freeformId, FREEFORM_CANVAS_WIDTH, type FreeformDoc, type FreeformElement, type FreeformElementType, type FreeformPage } from './templates/freeform-types';
+
+// New elements added from the Customize screen's own "+ Text/Image/Shape/
+// Button" toolbar start with this generic gray placeholder graphic (not a
+// stock photo, not a blank box) until the user replaces it with their own.
+const FREEFORM_PLACEHOLDER_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="180"><rect width="240" height="180" fill="#EAEAF0"/><path d="M0 180 L80 100 L140 140 L240 60 L240 180 Z" fill="#D3D3D8"/><circle cx="70" cy="50" r="20" fill="#D3D3D8"/></svg>';
+const FREEFORM_PLACEHOLDER_IMAGE = `data:image/svg+xml,${encodeURIComponent(FREEFORM_PLACEHOLDER_SVG)}`;
+
+function mapFreeformPage(doc: FreeformDoc | null, pageId: string, fn: (p: FreeformPage) => FreeformPage): FreeformDoc | null {
+  if (!doc) return doc;
+  return { pages: doc.pages.map((p) => (p.id === pageId ? fn(p) : p)) };
+}
+
+function freeformMaxZ(elements: FreeformElement[]): number {
+  return elements.reduce((m, el) => Math.max(m, el.zIndex), 0);
+}
 
 const PIPELINE_CONFIG = categorySignals as unknown as CategorySignalsConfig;
 const MODULE_SEQUENCES = moduleSequences as unknown as ModuleSequencesConfig;
@@ -201,6 +219,9 @@ const initialState: AppState = {
   prompt: '',
   template: 'Story Scroll',
   templateMode: 'frames',
+  freeform: null,
+  freeformActivePageId: null,
+  freeformSelectedId: null,
 
   vCount: 5,
   variants: [],
@@ -511,6 +532,21 @@ export interface AppActions {
   logout: () => void;
   setTemplateFilter: (v: string) => void;
   useTemplate: (name: string) => void;
+
+  selectFreeform: (id: string | null) => void;
+  setActiveFreeformPage: (pageId: string) => void;
+  patchFreeformElement: (pageId: string, elementId: string, patch: Partial<FreeformElement>) => void;
+  removeFreeformElement: (pageId: string, elementId: string) => void;
+  addFreeformElement: (pageId: string, type: FreeformElementType) => void;
+  duplicateFreeformElement: (pageId: string, elementId: string) => void;
+  addFreeformPage: () => void;
+  duplicateFreeformPage: (pageId: string) => void;
+  removeFreeformPage: (pageId: string) => void;
+  reorderFreeformPages: (fromIndex: number, toIndex: number) => void;
+  renameFreeformPage: (pageId: string, name: string) => void;
+  setFreeformPageBackground: (pageId: string, hex: string) => void;
+  setFreeformPageHeight: (pageId: string, height: number) => void;
+
   getStockPhoto: (query: string) => StockPhotoEntry;
   fetchStockPhoto: (query: string) => void;
   sceneTreatment: () => SceneTreatment;
@@ -1582,15 +1618,173 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // this is a no-op change for all 8 of them: templateMode keeps resolving
   // to 'frames', same as it already does before this project ever reaches
   // Refine (initial state).
+  // Feature Story is the one template with a real, editable freeform draft
+  // (buildFeatureStoryFreeformPages() -- the other 8 have no equivalent
+  // content to seed yet, same honest scoping as the Preview button). For it,
+  // "Use template" now lands the user straight on /templates/customize with
+  // a real draft already on the canvas, instead of routing into the
+  // upload -> wait -> classify -> questions -> review pipeline like every
+  // other template still does.
   const useTemplate = useCallback(
     (name: string) => {
       const tpl = TEMPLATES.find((t) => t.name === name);
       if (tpl) patch({ previewTheme: tpl.theme, previewLayout: tpl.layout });
-      patch({ templateMode: tpl?.kind === 'feature-story' ? 'feature-story' : 'frames' });
+      const isFeatureStory = tpl?.kind === 'feature-story';
+      patch({ templateMode: isFeatureStory ? 'feature-story' : 'frames' });
+      if (isFeatureStory) {
+        const pages = buildFeatureStoryFreeformPages();
+        patch({ freeform: { pages }, freeformActivePageId: pages[0]?.id ?? null, freeformSelectedId: null });
+        say(`"${name}" applied — customize it below`);
+        navigate('/templates/customize');
+        return;
+      }
       say(`"${name}" applied — add your screens to see it`);
       navigate('/create');
     },
     [patch, say, navigate],
+  );
+
+  const selectFreeform = useCallback((id: string | null) => patch({ freeformSelectedId: id }), [patch]);
+
+  const setActiveFreeformPage = useCallback((pageId: string) => patch({ freeformActivePageId: pageId, freeformSelectedId: null }), [patch]);
+
+  const patchFreeformElement = useCallback(
+    (pageId: string, elementId: string, elPatch: Partial<FreeformElement>) => {
+      patch((s) => ({
+        freeform: mapFreeformPage(s.freeform, pageId, (p) => ({
+          ...p,
+          elements: p.elements.map((el) => (el.id === elementId ? ({ ...el, ...elPatch } as FreeformElement) : el)),
+        })),
+      }));
+    },
+    [patch],
+  );
+
+  const removeFreeformElement = useCallback(
+    (pageId: string, elementId: string) => {
+      patch((s) => ({
+        freeform: mapFreeformPage(s.freeform, pageId, (p) => ({ ...p, elements: p.elements.filter((el) => el.id !== elementId) })),
+        freeformSelectedId: s.freeformSelectedId === elementId ? null : s.freeformSelectedId,
+      }));
+    },
+    [patch],
+  );
+
+  const addFreeformElement = useCallback(
+    (pageId: string, type: FreeformElementType) => {
+      patch((s) => {
+        const page = s.freeform?.pages.find((p) => p.id === pageId);
+        if (!page) return {};
+        const z = freeformMaxZ(page.elements) + 1;
+        const cx = FREEFORM_CANVAS_WIDTH / 2;
+        const cy = page.height / 2;
+        let el: FreeformElement;
+        if (type === 'text') {
+          el = { id: freeformId('text'), type: 'text', x: cx - 150, y: cy - 20, w: 300, h: 40, zIndex: z, text: 'New text', fontFamily: 'body', fontSize: 18, fontWeight: 600, color: '#14141A', align: 'left' };
+        } else if (type === 'image') {
+          el = { id: freeformId('image'), type: 'image', x: cx - 120, y: cy - 90, w: 240, h: 180, zIndex: z, src: FREEFORM_PLACEHOLDER_IMAGE, objectFit: 'cover', borderRadius: 8 };
+        } else if (type === 'shape') {
+          el = { id: freeformId('shape'), type: 'shape', x: cx - 80, y: cy - 60, w: 160, h: 120, zIndex: z, shape: 'rect', fill: '#EAEAF0', borderRadius: 8, opacity: 1 };
+        } else {
+          el = { id: freeformId('button'), type: 'button', x: cx - 90, y: cy - 20, w: 180, h: 44, zIndex: z, text: 'Button', bg: '#7A47F5', color: '#FFFFFF', borderRadius: 999 };
+        }
+        return {
+          freeform: mapFreeformPage(s.freeform, pageId, (p) => ({ ...p, elements: [...p.elements, el] })),
+          freeformSelectedId: el.id,
+        };
+      });
+    },
+    [patch],
+  );
+
+  const duplicateFreeformElement = useCallback(
+    (pageId: string, elementId: string) => {
+      patch((s) => {
+        const page = s.freeform?.pages.find((p) => p.id === pageId);
+        const el = page?.elements.find((e) => e.id === elementId);
+        if (!page || !el) return {};
+        const z = freeformMaxZ(page.elements) + 1;
+        const copy: FreeformElement = { ...el, id: freeformId(el.type), x: el.x + 20, y: el.y + 20, zIndex: z };
+        return {
+          freeform: mapFreeformPage(s.freeform, pageId, (p) => ({ ...p, elements: [...p.elements, copy] })),
+          freeformSelectedId: copy.id,
+        };
+      });
+    },
+    [patch],
+  );
+
+  const addFreeformPage = useCallback(() => {
+    patch((s) => {
+      if (!s.freeform) return {};
+      const newPage: FreeformPage = { id: freeformId('page'), name: `Page ${s.freeform.pages.length + 1}`, backgroundColor: '#FFFFFF', height: 400, elements: [] };
+      return { freeform: { pages: [...s.freeform.pages, newPage] }, freeformActivePageId: newPage.id, freeformSelectedId: null };
+    });
+  }, [patch]);
+
+  const duplicateFreeformPage = useCallback(
+    (pageId: string) => {
+      patch((s) => {
+        if (!s.freeform) return {};
+        const idx = s.freeform.pages.findIndex((p) => p.id === pageId);
+        if (idx < 0) return {};
+        const src = s.freeform.pages[idx];
+        const copy: FreeformPage = { ...src, id: freeformId('page'), name: `${src.name} copy`, elements: src.elements.map((el) => ({ ...el, id: freeformId(el.type) })) };
+        const pages = [...s.freeform.pages];
+        pages.splice(idx + 1, 0, copy);
+        return { freeform: { pages }, freeformActivePageId: copy.id, freeformSelectedId: null };
+      });
+    },
+    [patch],
+  );
+
+  // Keeps at least one page -- an empty document has nothing left to
+  // customize or land on, so the last page can't be removed.
+  const removeFreeformPage = useCallback(
+    (pageId: string) => {
+      patch((s) => {
+        if (!s.freeform || s.freeform.pages.length <= 1) return {};
+        const pages = s.freeform.pages.filter((p) => p.id !== pageId);
+        const freeformActivePageId = s.freeformActivePageId === pageId ? pages[0]?.id ?? null : s.freeformActivePageId;
+        return { freeform: { pages }, freeformActivePageId, freeformSelectedId: null };
+      });
+    },
+    [patch],
+  );
+
+  const reorderFreeformPages = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      patch((s) => {
+        if (!s.freeform) return {};
+        const pages = [...s.freeform.pages];
+        const [moved] = pages.splice(fromIndex, 1);
+        if (!moved) return {};
+        pages.splice(toIndex, 0, moved);
+        return { freeform: { pages } };
+      });
+    },
+    [patch],
+  );
+
+  const renameFreeformPage = useCallback(
+    (pageId: string, name: string) => {
+      patch((s) => ({ freeform: mapFreeformPage(s.freeform, pageId, (p) => ({ ...p, name })) }));
+    },
+    [patch],
+  );
+
+  const setFreeformPageBackground = useCallback(
+    (pageId: string, hex: string) => {
+      patch((s) => ({ freeform: mapFreeformPage(s.freeform, pageId, (p) => ({ ...p, backgroundColor: hex })) }));
+    },
+    [patch],
+  );
+
+  const setFreeformPageHeight = useCallback(
+    (pageId: string, height: number) => {
+      patch((s) => ({ freeform: mapFreeformPage(s.freeform, pageId, (p) => ({ ...p, height: Math.max(120, Math.round(height)) })) }));
+    },
+    [patch],
   );
 
   // Real stock photos for the Templates gallery -- ported from the live
@@ -2169,6 +2363,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     logout,
     setTemplateFilter,
     useTemplate,
+    selectFreeform,
+    setActiveFreeformPage,
+    patchFreeformElement,
+    removeFreeformElement,
+    addFreeformElement,
+    duplicateFreeformElement,
+    addFreeformPage,
+    duplicateFreeformPage,
+    removeFreeformPage,
+    reorderFreeformPages,
+    renameFreeformPage,
+    setFreeformPageBackground,
+    setFreeformPageHeight,
     getStockPhoto,
     fetchStockPhoto,
     sceneTreatment,

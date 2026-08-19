@@ -1,4 +1,5 @@
 import type { ApprovedSection, ClassifyResult, DesignSystemSheet, ImageFeatureRecord, Narration, PerceiveStatus, PresentFrame } from './pipeline/types';
+import type { FreeformDoc } from './templates/freeform-types';
 
 // The canvas's real, dynamic section list -- a superset of ApprovedSection
 // that also carries the real Design System sheet and any Present-generated
@@ -141,6 +142,15 @@ export interface AppState {
   // mapPipelineToEditorialContent() instead. Additive: every existing
   // template keeps resolving to 'frames'.
   templateMode: 'frames' | 'feature-story';
+
+  // The freeform customize screen (/templates/customize) -- a genuinely
+  // editable draft the user lands on straight from "Use template" for
+  // Feature Story, instead of the fixed-content read-only Refine canvas.
+  // null until a template seeds it (useTemplate()); persists across
+  // navigation within the session same as everything else in this context.
+  freeform: FreeformDoc | null;
+  freeformActivePageId: string | null;
+  freeformSelectedId: string | null;
 
   vCount: number;
   variants: VariantSlot[];

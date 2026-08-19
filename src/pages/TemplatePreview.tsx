@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useApp } from '../lib/store';
 import { Logo } from '../components/Logo';
 import { CoverModule } from '../components/templates/editorial/CoverModule';
@@ -36,7 +36,6 @@ import * as demo from '../lib/templates/editorial-demo-content';
 // visitor's own real screens yet.
 export function TemplatePreview() {
   const { actions } = useApp();
-  const navigate = useNavigate();
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--text)' }}>
@@ -69,10 +68,7 @@ export function TemplatePreview() {
         </span>
         <button
           type="button"
-          onClick={() => {
-            actions.useTemplate('Feature Story');
-            navigate('/create');
-          }}
+          onClick={() => actions.useTemplate('Feature Story')}
           style={{
             height: 40,
             padding: '0 20px',
@@ -116,10 +112,7 @@ export function TemplatePreview() {
       <div style={{ display: 'flex', justifyContent: 'center', padding: '48px 32px', borderTop: '1px solid var(--border)' }}>
         <button
           type="button"
-          onClick={() => {
-            actions.useTemplate('Feature Story');
-            navigate('/create');
-          }}
+          onClick={() => actions.useTemplate('Feature Story')}
           style={{
             height: 52,
             padding: '0 32px',

@@ -189,7 +189,7 @@ function deviceMockupPage(): FreeformPage {
       S(480, 40, 240, 36, 1, INK, { borderRadius: 999 }),
       T(480, 50, 240, 18, 2, `APP SCREEN · ${demo.deviceMockup.captionLabel}`.toUpperCase(), { fontFamily: 'mono', fontSize: 9.5, fontWeight: 600, color: WHITE, align: 'center', uppercase: true }),
       S(500, 110, 200, 420, 3, '#1C1C22', { borderRadius: 34 }),
-      I(510, 120, 180, 400, 4, demo.deviceMockup.screenshotUrl, { objectFit: 'cover', borderRadius: 24 }),
+      I(510, 120, 180, 400, 4, demo.deviceMockup.screenshotUrl, { objectFit: 'cover', borderRadius: 24, locked: true }),
       ...(annotation ? [T(716, 140, 160, 60, 5, annotation, { fontSize: 13, fontWeight: 600, color: TEXT })] : []),
     ],
   };
@@ -280,7 +280,7 @@ function closingMosaicPage(): FreeformPage {
     const pad = 8;
     return [
       S(b.x, b.y, b.w, b.h, i * 2 + 1, tile.dark ? '#14141A' : SURFACE_2, { borderRadius: 16 }),
-      I(b.x + pad, b.y + pad, b.w - pad * 2, b.h - pad * 2, i * 2 + 2, tile.imageUrl, { objectFit: 'cover', borderRadius: 10 }),
+      I(b.x + pad, b.y + pad, b.w - pad * 2, b.h - pad * 2, i * 2 + 2, tile.imageUrl, { objectFit: 'cover', borderRadius: 10, locked: true }),
     ];
   });
   return { id: 'closing-mosaic', name: 'Closing Mosaic', backgroundColor: WHITE, height: 600, elements: elements.flat() };

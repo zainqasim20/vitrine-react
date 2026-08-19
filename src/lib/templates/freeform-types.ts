@@ -23,6 +23,12 @@ interface FreeformElementBase {
   w: number;
   h: number;
   zIndex: number;
+  // Position/size frozen -- used for images that fill a decorative frame
+  // (a device mockup's screen, a mosaic tile's mat) where dragging the
+  // image out breaks the frame's whole point. Still selectable, and (for
+  // images) still replaceable -- only move/resize are blocked, and only
+  // until the user explicitly unlocks it from the panel.
+  locked?: boolean;
 }
 
 export interface FreeformTextElement extends FreeformElementBase {
@@ -43,6 +49,24 @@ export interface FreeformImageElement extends FreeformElementBase {
   src: string;
   objectFit: 'cover' | 'contain';
   borderRadius: number;
+  // Focal position within the frame, 0-100% each axis -- maps to CSS
+  // object-position. A simplified stand-in for a real crop-rectangle tool:
+  // it repositions which part of the source image shows through a
+  // cover-fit frame, but doesn't let you change the crop's own size the
+  // way dragging crop handles in Figma would.
+  focalX?: number;
+  focalY?: number;
+  // Adjustment sliders, all optional (absent = untouched/default). Mapped
+  // to a single combined CSS filter string at render time. "Temperature"
+  // is a CSS-only approximation (a warm/cool tint via sepia+hue-rotate),
+  // not a real white-balance shift -- disclosed, not a from-scratch color
+  // engine.
+  opacity?: number; // 0-1
+  blur?: number; // px
+  brightness?: number; // %, 100 = untouched
+  contrast?: number; // %, 100 = untouched
+  saturation?: number; // %, 100 = untouched
+  temperature?: number; // -100 (cool) .. 100 (warm), 0 = untouched
 }
 
 export interface FreeformShapeElement extends FreeformElementBase {
@@ -73,6 +97,29 @@ export interface FreeformPage {
 
 export interface FreeformDoc {
   pages: FreeformPage[];
+}
+
+// Combines an image element's adjustment sliders into one CSS filter
+// string, applied directly to the <img>. Temperature has no real CSS
+// equivalent, so it's approximated with sepia (warm) or hue-rotate (cool)
+// plus a small saturation nudge -- a reasonable-looking stand-in, not a
+// true white-balance shift.
+export function freeformImageFilter(el: FreeformImageElement): string {
+  const parts: string[] = [];
+  if (el.blur) parts.push(`blur(${el.blur}px)`);
+  if (el.brightness !== undefined && el.brightness !== 100) parts.push(`brightness(${el.brightness}%)`);
+  if (el.contrast !== undefined && el.contrast !== 100) parts.push(`contrast(${el.contrast}%)`);
+  if (el.saturation !== undefined && el.saturation !== 100) parts.push(`saturate(${el.saturation}%)`);
+  if (el.temperature) {
+    if (el.temperature > 0) {
+      parts.push(`sepia(${(Math.min(el.temperature, 100) / 100) * 0.45})`);
+      parts.push(`saturate(${100 + el.temperature * 0.2}%)`);
+    } else {
+      parts.push(`hue-rotate(${el.temperature * 0.6}deg)`);
+      parts.push(`saturate(${100 + Math.abs(el.temperature) * 0.15}%)`);
+    }
+  }
+  return parts.join(' ');
 }
 
 export const FREEFORM_CANVAS_WIDTH = 1200;

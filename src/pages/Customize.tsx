@@ -9,6 +9,10 @@ function mono(): React.CSSProperties {
   return { fontFamily: "'Geist Mono', monospace", fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--text-3)' };
 }
 
+function alignBtnStyle(): React.CSSProperties {
+  return { flex: 1, height: 32, border: '1px solid var(--border)', borderRadius: 8, background: 'transparent', color: 'var(--text-2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' };
+}
+
 function IconBtn({ icon, title, onClick, danger, disabled }: { icon: string; title: string; onClick: (e: React.MouseEvent) => void; danger?: boolean; disabled?: boolean }) {
   return (
     <button
@@ -23,35 +27,137 @@ function IconBtn({ icon, title, onClick, danger, disabled }: { icon: string; tit
   );
 }
 
-function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (hex: string) => void }) {
-  const safe = /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#000000';
+const GRADIENT_RE = /^linear-gradient\(\s*(-?\d+)deg\s*,\s*(#[0-9a-fA-F]{6})\s*,\s*(#[0-9a-fA-F]{6})\s*\)$/;
+
+function parseGradient(value: string): { angle: number; from: string; to: string } | null {
+  const m = GRADIENT_RE.exec(value.trim());
+  if (!m) return null;
+  return { angle: Number(m[1]), from: m[2], to: m[3] };
+}
+
+// Solid color OR a 2-stop linear gradient, written into the exact same
+// field either way -- background/fill are already plain CSS `background`
+// values (freeform-types.ts never modeled color as its own type), so a
+// gradient is just a linear-gradient() string in that same slot, no data
+// model change needed.
+function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (css: string) => void }) {
+  const gradient = parseGradient(value);
+  const safeSolid = !gradient && /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#000000';
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <span style={mono()}>{label}</span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <input type="color" value={safe} onChange={(e) => onChange(e.target.value)} style={{ width: 32, height: 32, padding: 0, border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', background: 'none' }} />
-        <input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          style={{ flex: 1, height: 32, border: '1px solid var(--border)', borderRadius: 8, padding: '0 10px', fontFamily: "'Geist Mono', monospace", fontSize: 12, color: 'var(--text)', background: 'transparent', outline: 'none' }}
-        />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={mono()}>{label}</span>
+        <div style={{ display: 'flex', gap: 4 }}>
+          <button
+            type="button"
+            onClick={() => !gradient || onChange(gradient.from)}
+            style={{ height: 22, padding: '0 8px', border: `1px solid ${!gradient ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 999, background: !gradient ? 'var(--violet-light)' : 'transparent', color: !gradient ? 'var(--violet-deep)' : 'var(--text-3)', fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}
+          >
+            Solid
+          </button>
+          <button
+            type="button"
+            onClick={() => gradient || onChange(`linear-gradient(135deg, ${safeSolid}, #7A47F5)`)}
+            style={{ height: 22, padding: '0 8px', border: `1px solid ${gradient ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 999, background: gradient ? 'var(--violet-light)' : 'transparent', color: gradient ? 'var(--violet-deep)' : 'var(--text-3)', fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}
+          >
+            Gradient
+          </button>
+        </div>
       </div>
+
+      {gradient ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input type="color" value={gradient.from} onChange={(e) => onChange(`linear-gradient(${gradient.angle}deg, ${e.target.value}, ${gradient.to})`)} style={{ width: 32, height: 32, padding: 0, border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', background: 'none' }} />
+            <input type="color" value={gradient.to} onChange={(e) => onChange(`linear-gradient(${gradient.angle}deg, ${gradient.from}, ${e.target.value})`)} style={{ width: 32, height: 32, padding: 0, border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', background: 'none' }} />
+            <div style={{ flex: 1, borderRadius: 8, border: '1px solid var(--border)', background: value }} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={mono()}>Angle</span>
+            <input type="range" min={0} max={360} value={gradient.angle} onChange={(e) => onChange(`linear-gradient(${e.target.value}deg, ${gradient.from}, ${gradient.to})`)} style={{ flex: 1, accentColor: 'var(--violet)' }} />
+            <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 11, color: 'var(--text-2)', width: 32, textAlign: 'right' }}>{gradient.angle}°</span>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input type="color" value={safeSolid} onChange={(e) => onChange(e.target.value)} style={{ width: 32, height: 32, padding: 0, border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', background: 'none' }} />
+          <input
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            style={{ flex: 1, height: 32, border: '1px solid var(--border)', borderRadius: 8, padding: '0 10px', fontFamily: "'Geist Mono', monospace", fontSize: 12, color: 'var(--text)', background: 'transparent', outline: 'none' }}
+          />
+        </div>
+      )}
     </div>
   );
 }
 
+// Deliberately NOT <input type="number"> -- browsers' own clamping/
+// formatting on that input type fights a controlled value and was exactly
+// why the field couldn't be fully cleared while typing (it kept snapping
+// back to a partial number). Plain text input with local, uncommitted
+// state instead: typing freely edits local text only; the real value only
+// changes on blur or Enter, and an empty/invalid entry reverts to
+// whatever the value already was rather than committing anything.
 function NumberField({ label, value, onChange, min, max }: { label: string; value: number; onChange: (n: number) => void; min?: number; max?: number }) {
+  const [text, setText] = useState(String(Math.round(value)));
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    if (!focused) setText(String(Math.round(value)));
+  }, [value, focused]);
+
+  function commit() {
+    const n = Number(text);
+    if (text.trim() === '' || !Number.isFinite(n)) {
+      setText(String(Math.round(value)));
+      return;
+    }
+    let clamped = n;
+    if (min !== undefined) clamped = Math.max(min, clamped);
+    if (max !== undefined) clamped = Math.min(max, clamped);
+    onChange(clamped);
+    setText(String(Math.round(clamped)));
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <span style={mono()}>{label}</span>
       <input
-        type="number"
-        value={Math.round(value)}
-        min={min}
-        max={max}
-        onChange={(e) => onChange(Number(e.target.value))}
+        type="text"
+        inputMode="numeric"
+        value={text}
+        onFocus={() => setFocused(true)}
+        onChange={(e) => setText(e.target.value.replace(/[^0-9.-]/g, ''))}
+        onBlur={() => {
+          setFocused(false);
+          commit();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur();
+          if (e.key === 'Escape') {
+            setText(String(Math.round(value)));
+            e.currentTarget.blur();
+          }
+        }}
         style={{ height: 32, border: '1px solid var(--border)', borderRadius: 8, padding: '0 10px', fontFamily: "'Geist Mono', monospace", fontSize: 12, color: 'var(--text)', background: 'transparent', outline: 'none' }}
       />
+    </div>
+  );
+}
+
+function SliderField({ label, value, onChange, min, max, displaySuffix = '' }: { label: string; value: number; onChange: (n: number) => void; min: number; max: number; displaySuffix?: string }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+        <span style={mono()}>{label}</span>
+        <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 11, color: 'var(--text-2)' }}>
+          {value}
+          {displaySuffix}
+        </span>
+      </div>
+      <input type="range" min={min} max={max} value={value} onChange={(e) => onChange(Number(e.target.value))} style={{ width: '100%', accentColor: 'var(--violet)' }} />
     </div>
   );
 }
@@ -282,6 +388,7 @@ export function Customize() {
                       {p.name}
                     </span>
                   )}
+                  {renamingPageId !== p.id && <IconBtn icon="ph ph-pencil-simple" title="Rename page" onClick={(e) => { e.stopPropagation(); setRenamingPageId(p.id); }} />}
                   <IconBtn icon="ph ph-copy" title="Duplicate page" onClick={(e) => { e.stopPropagation(); actions.duplicateFreeformPage(p.id); }} />
                   {pages.length > 1 && <IconBtn icon="ph ph-trash" title="Delete page" danger onClick={(e) => { e.stopPropagation(); actions.removeFreeformPage(p.id); }} />}
                 </div>
@@ -330,6 +437,7 @@ export function Customize() {
                     onSelect={(id, additive) => actions.selectFreeform(p.id, id, additive)}
                     onPatch={(id, patch) => actions.patchFreeformElement(p.id, id, patch)}
                     onDelete={(ids) => actions.removeFreeformElements(p.id, ids)}
+                    onResizeHeight={(height) => actions.setFreeformPageHeight(p.id, height)}
                   />
                 </div>
               </div>
@@ -375,6 +483,31 @@ export function Customize() {
                   <IconBtn icon="ph ph-trash" title="Delete group" danger onClick={() => actions.removeFreeformElements(selectedPage.id, selectedIds)} />
                 </div>
               </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={mono()}>Align</span>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {[
+                    { mode: 'left' as const, icon: 'ph ph-align-left' },
+                    { mode: 'centerH' as const, icon: 'ph ph-align-center-horizontal' },
+                    { mode: 'right' as const, icon: 'ph ph-align-right' },
+                  ].map((a) => (
+                    <button key={a.mode} type="button" title={`Align ${a.mode}`} onClick={() => actions.alignFreeformElements(selectedPage.id, selectedIds, a.mode)} style={alignBtnStyle()}>
+                      <i className={a.icon} style={{ fontSize: 15 }} />
+                    </button>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {[
+                    { mode: 'top' as const, icon: 'ph ph-align-top' },
+                    { mode: 'centerV' as const, icon: 'ph ph-align-center-vertical' },
+                    { mode: 'bottom' as const, icon: 'ph ph-align-bottom' },
+                  ].map((a) => (
+                    <button key={a.mode} type="button" title={`Align ${a.mode}`} onClick={() => actions.alignFreeformElements(selectedPage.id, selectedIds, a.mode)} style={alignBtnStyle()}>
+                      <i className={a.icon} style={{ fontSize: 15 }} />
+                    </button>
+                  ))}
+                </div>
+              </div>
               <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: 'var(--text-3)' }}>Shift-click to add or remove elements from the selection. Drag any of them to move the whole group.</p>
             </>
           ) : selected ? (
@@ -393,6 +526,11 @@ export function Customize() {
                     onClick={() => patchSelected({ zIndex: Math.min(...selectedPage.elements.map((e) => e.zIndex)) - 1 })}
                   />
                   <IconBtn icon="ph ph-copy" title="Duplicate" onClick={() => actions.duplicateFreeformElement(selectedPage.id, selected.id)} />
+                  <IconBtn
+                    icon={selected.locked ? 'ph-fill ph-lock-simple' : 'ph ph-lock-simple-open'}
+                    title={selected.locked ? 'Unlock (allow moving/resizing again)' : 'Lock position (still editable/replaceable)'}
+                    onClick={() => patchSelected({ locked: !selected.locked })}
+                  />
                   <IconBtn icon="ph ph-trash" title="Delete" danger onClick={() => actions.removeFreeformElement(selectedPage.id, selected.id)} />
                 </div>
               </div>
@@ -453,6 +591,64 @@ export function Customize() {
                     </div>
                   </div>
                   <NumberField label="Corner radius" value={selected.borderRadius} min={0} max={999} onChange={(borderRadius) => patchSelected({ borderRadius })} />
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                    <span style={mono()}>Crop position (drag the dot)</span>
+                    <div
+                      onPointerDown={(e) => {
+                        const track = e.currentTarget;
+                        const move = (ev: PointerEvent) => {
+                          const rect = track.getBoundingClientRect();
+                          const fx = Math.max(0, Math.min(100, ((ev.clientX - rect.left) / rect.width) * 100));
+                          const fy = Math.max(0, Math.min(100, ((ev.clientY - rect.top) / rect.height) * 100));
+                          patchSelected({ focalX: Math.round(fx), focalY: Math.round(fy) });
+                        };
+                        const up = () => {
+                          window.removeEventListener('pointermove', move);
+                          window.removeEventListener('pointerup', up);
+                        };
+                        move(e.nativeEvent);
+                        window.addEventListener('pointermove', move);
+                        window.addEventListener('pointerup', up);
+                      }}
+                      style={{ position: 'relative', height: 80, borderRadius: 8, border: '1px solid var(--border)', overflow: 'hidden', cursor: 'crosshair', background: `url(${selected.src}) center/cover` }}
+                    >
+                      <span
+                        style={{
+                          position: 'absolute',
+                          left: `${selected.focalX ?? 50}%`,
+                          top: `${selected.focalY ?? 50}%`,
+                          width: 12,
+                          height: 12,
+                          borderRadius: 999,
+                          background: '#FFFFFF',
+                          border: '2px solid var(--violet)',
+                          transform: 'translate(-50%, -50%)',
+                          pointerEvents: 'none',
+                          boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                    <span style={mono()}>Adjustments</span>
+                    <SliderField label="Opacity" min={0} max={100} value={Math.round((selected.opacity ?? 1) * 100)} onChange={(v) => patchSelected({ opacity: v / 100 })} displaySuffix="%" />
+                    <SliderField label="Blur" min={0} max={20} value={selected.blur ?? 0} onChange={(blur) => patchSelected({ blur })} displaySuffix="px" />
+                    <SliderField label="Exposure" min={40} max={160} value={selected.brightness ?? 100} onChange={(brightness) => patchSelected({ brightness })} displaySuffix="%" />
+                    <SliderField label="Contrast" min={40} max={160} value={selected.contrast ?? 100} onChange={(contrast) => patchSelected({ contrast })} displaySuffix="%" />
+                    <SliderField label="Saturation" min={0} max={200} value={selected.saturation ?? 100} onChange={(saturation) => patchSelected({ saturation })} displaySuffix="%" />
+                    <SliderField label="Temperature" min={-100} max={100} value={selected.temperature ?? 0} onChange={(temperature) => patchSelected({ temperature })} />
+                    <button
+                      type="button"
+                      onClick={() => patchSelected({ opacity: 1, blur: 0, brightness: 100, contrast: 100, saturation: 100, temperature: 0, focalX: 50, focalY: 50 })}
+                      style={{ height: 32, border: '1px solid var(--border)', borderRadius: 8, background: 'transparent', color: 'var(--text-2)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 12, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                    >
+                      <i className="ph ph-arrow-counter-clockwise" style={{ fontSize: 14 }} />
+                      Reset adjustments
+                    </button>
+                  </div>
+
                   <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: 'var(--text-3)' }}>Select the image on the canvas and use "Replace image" to upload your own.</p>
                 </>
               )}

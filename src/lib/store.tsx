@@ -543,6 +543,7 @@ export interface AppActions {
   addFreeformElement: (pageId: string, type: FreeformElementType) => void;
   duplicateFreeformElement: (pageId: string, elementId: string) => void;
   duplicateFreeformElements: (pageId: string, elementIds: string[]) => void;
+  alignFreeformElements: (pageId: string, elementIds: string[], mode: 'left' | 'centerH' | 'right' | 'top' | 'centerV' | 'bottom') => void;
   addFreeformPage: () => void;
   duplicateFreeformPage: (pageId: string) => void;
   removeFreeformPage: (pageId: string) => void;
@@ -1836,6 +1837,51 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [patch],
   );
 
+  // Aligns every selected element to the SELECTION's own bounding box edge/
+  // center (the standard design-tool convention), not to each other
+  // pairwise or to the page.
+  const alignFreeformElements = useCallback(
+    (pageId: string, elementIds: string[], mode: 'left' | 'centerH' | 'right' | 'top' | 'centerV' | 'bottom') => {
+      snapshotFreeformHistory();
+      const idSet = new Set(elementIds);
+      patch((s) => {
+        const page = s.freeform?.pages.find((p) => p.id === pageId);
+        if (!page) return {};
+        const group = page.elements.filter((el) => idSet.has(el.id));
+        if (group.length < 2) return {};
+        const minX = Math.min(...group.map((el) => el.x));
+        const maxX = Math.max(...group.map((el) => el.x + el.w));
+        const minY = Math.min(...group.map((el) => el.y));
+        const maxY = Math.max(...group.map((el) => el.y + el.h));
+        return {
+          freeform: mapFreeformPage(s.freeform, pageId, (p) => ({
+            ...p,
+            elements: p.elements.map((el) => {
+              if (!idSet.has(el.id)) return el;
+              switch (mode) {
+                case 'left':
+                  return { ...el, x: minX };
+                case 'centerH':
+                  return { ...el, x: Math.round((minX + maxX) / 2 - el.w / 2) };
+                case 'right':
+                  return { ...el, x: maxX - el.w };
+                case 'top':
+                  return { ...el, y: minY };
+                case 'centerV':
+                  return { ...el, y: Math.round((minY + maxY) / 2 - el.h / 2) };
+                case 'bottom':
+                  return { ...el, y: maxY - el.h };
+                default:
+                  return el;
+              }
+            }),
+          })),
+        };
+      });
+    },
+    [patch],
+  );
+
   const addFreeformPage = useCallback(() => {
     snapshotFreeformHistory();
     patch((s) => {
@@ -2500,6 +2546,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     addFreeformElement,
     duplicateFreeformElement,
     duplicateFreeformElements,
+    alignFreeformElements,
     addFreeformPage,
     duplicateFreeformPage,
     removeFreeformPage,

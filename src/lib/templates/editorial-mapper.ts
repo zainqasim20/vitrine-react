@@ -154,6 +154,17 @@ export function mapPipelineToEditorialContent(input: EditorialMapperInput): Edit
     designerName: '',
     year,
     logoUrl: findLogoUrl(sections, perceiveRecords),
+    // Feature Story's own default visual identity, not a per-project
+    // signal: the Biorg reference (the case study this template's visual
+    // direction was asked to move toward) reads as dark-canvas-forward
+    // throughout, not the plain white default this module shipped with.
+    // CoverModule already fully supports a dark treatment (bg/text/mark
+    // colors all branch on this flag) -- it was just never turned on.
+    // Disclosed interpretation, not a literal match to a specific Biorg
+    // frame: the reference's own opening moments don't structurally match
+    // this module's meta-strip-plus-mark convention, so this is the
+    // reference's overall mood applied here, not a copied layout.
+    dark: true,
   };
 
   const sectionDivider: SectionDividerModuleContent = {

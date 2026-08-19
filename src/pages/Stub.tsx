@@ -26,11 +26,15 @@ import { ClosingMosaicModule } from '../components/templates/editorial/ClosingMo
 // DesignSystemSheet/ApprovedSection data into these modules' content
 // shapes) is a later, separate pass per the ticket.
 
+// dark: true -- Feature Story's new default identity (Biorg re-skin pass),
+// matching what mapPipelineToEditorialContent() now sets by default. See
+// editorial-mapper.ts's own comment on the cover object for the reasoning.
 const MOCK_COVER = {
   projectName: 'Northwind',
   category: 'Web App · Fintech',
   designerName: 'Alex Rivera',
   year: '2026',
+  dark: true,
 };
 
 const MOCK_DIVIDER = {

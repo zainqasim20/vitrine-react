@@ -110,6 +110,11 @@ interface FreeformCanvasProps {
   // final look. Reuses this component instead of a second renderer so the
   // two can never drift out of sync with each other.
   readOnly?: boolean;
+  // Exposes the actual page-background surface DOM node (not the outer
+  // wrapper, which also carries the page-resize handle bar outside it) --
+  // Customize.tsx uses this for html2canvas export/cover-thumbnail capture,
+  // so the captured image never includes editing chrome.
+  onSurfaceRef?: (el: HTMLDivElement | null) => void;
 }
 
 // The core editing surface for /templates/customize -- a fixed-width
@@ -131,7 +136,7 @@ interface FreeformCanvasProps {
 // zoom, so it's simply frozen, same as before. This is deliberately NOT a
 // scaled/zoomable viewport at the canvas level: interactions stay in real
 // pixel units to keep drag/resize/snap/zoom math simple and reliable.
-export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete, onResizeHeight, readOnly = false }: FreeformCanvasProps) {
+export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete, onResizeHeight, readOnly = false, onSurfaceRef }: FreeformCanvasProps) {
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [replaceTargetId, setReplaceTargetId] = useState<string | null>(null);
   const [guides, setGuides] = useState<SnapGuides>({ x: null, y: null });
@@ -369,7 +374,10 @@ export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete,
   return (
     <div style={{ position: 'relative', width: FREEFORM_CANVAS_WIDTH, flex: 'none' }}>
       <div
-        ref={surfaceRef}
+        ref={(el) => {
+          surfaceRef.current = el;
+          onSurfaceRef?.(el);
+        }}
         onClick={() => onSelect(null)}
         style={{ position: 'relative', width: '100%', height: page.height, background: page.backgroundColor, overflow: 'hidden' }}
       >

@@ -516,6 +516,7 @@ export interface AppActions {
   mdSource: () => string;
 
   openProject: (id: string) => void;
+  saveFreeformProject: (opts?: { publish?: boolean; cover?: string }) => void;
   trashProject: (id: string) => void;
   restoreProject: (id: string) => void;
   deleteProjectForever: (id: string) => void;
@@ -1493,8 +1494,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const s = stateRef.current;
       const p = s.projects.find((x) => x.id === id);
       if (!p) return;
-      if (s.currentProjectId === id && s.files.length) {
-        navigate(approvedSections().length ? '/refine' : s.statuses.length ? '/review' : '/create');
+      if (s.currentProjectId === id && (s.files.length || s.freeform)) {
+        if (s.freeform) navigate('/templates/customize');
+        else navigate(approvedSections().length ? '/refine' : s.statuses.length ? '/review' : '/create');
+        return;
+      }
+      // A freeform snapshot has no memory-only gap (see ProjectSnapshot's
+      // own comment) -- it restores completely, unlike the frames pipeline
+      // below it, which can only bring back text/settings since its real
+      // screenshots lived in now-gone blob URLs.
+      if (p.snapshot.freeform) {
+        freeformHistoryRef.current = { past: [], future: [], lastPushAt: 0 };
+        patch({
+          currentProjectId: id,
+          title: p.snapshot.title || p.title,
+          freeform: p.snapshot.freeform,
+          freeformActivePageId: p.snapshot.freeform.pages[0]?.id ?? null,
+          freeformSelectedIds: [],
+          freeformCanUndo: false,
+          freeformCanRedo: false,
+          templateMode: p.snapshot.freeformTemplateMode || 'feature-story',
+        });
+        navigate('/templates/customize');
+        say(`Reopened "${p.title}"`);
         return;
       }
       patch({
@@ -1515,6 +1537,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
       say(`Reopened "${p.title}" — re-add its screens to continue (this doesn't store image files between sessions)`);
     },
     [navigate, approvedSections, patch, say],
+  );
+
+  // Explicit "Save draft" / "Publish" for a freeform project -- the
+  // Customize screen's own sidebar action, not routed through the frames
+  // pipeline's checkpoint-based autosaveProject() (which keys off
+  // approvedSections()/files, neither of which a freeform doc has). cover
+  // is an optional data URL Customize.tsx renders via html2canvas from the
+  // first page's own real canvas -- never a stock placeholder.
+  const saveFreeformProject = useCallback(
+    (opts?: { publish?: boolean; cover?: string }) => {
+      const s = stateRef.current;
+      if (!s.freeform) return;
+      const id = s.currentProjectId || genProjectId();
+      if (!s.currentProjectId) patch({ currentProjectId: id });
+      const existing = s.projects.find((p) => p.id === id);
+      const now = Date.now();
+      const record: ProjectRecord = {
+        id,
+        title: s.title.trim() || 'Untitled case study',
+        status: opts?.publish ? 'Published' : existing ? existing.status : 'Draft',
+        createdAt: existing ? existing.createdAt : now,
+        editedAt: now,
+        deletedAt: existing ? existing.deletedAt : null,
+        sectionCount: s.freeform.pages.length,
+        cover: opts?.cover ?? existing?.cover ?? null,
+        snapshot: { ...projectSnapshot(), freeform: s.freeform, freeformTemplateMode: s.templateMode },
+      };
+      const current = stateRef.current.projects;
+      const idx = current.findIndex((p) => p.id === id);
+      const projects = idx >= 0 ? current.map((p, i) => (i === idx ? record : p)) : [record, ...current];
+      persistProjects(projects);
+      patch({ projects, lastSavedAt: now, published: opts?.publish ? true : s.published });
+      say(opts?.publish ? `"${record.title}" published` : `"${record.title}" saved as draft`);
+    },
+    [patch, say, persistProjects, projectSnapshot],
   );
 
   const trashProject = useCallback(
@@ -2520,6 +2577,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     mdSource,
 
     openProject,
+    saveFreeformProject,
     trashProject,
     restoreProject,
     deleteProjectForever,

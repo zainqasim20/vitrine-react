@@ -6,6 +6,7 @@ import { FreeformCanvas } from '../components/customize/FreeformCanvas';
 import type { FreeformElement, FreeformElementType, FreeformGradient, FreeformPage } from '../lib/templates/freeform-types';
 import { buildFreeformGradientCss, FREEFORM_VIBRANT_PRESETS, parseFreeformGradient } from '../lib/templates/freeform-types';
 import { FONT_CATEGORY_LABELS, GOOGLE_FONTS, loadGoogleFont, resolveFreeformFontCss, type GoogleFontCategory } from '../lib/templates/google-fonts';
+import { captureFreeformCoverThumb, exportFreeformPagesAsImages, exportFreeformPagesAsPdf } from '../lib/templates/freeform-export';
 
 function mono(): React.CSSProperties {
   return { fontFamily: "'Geist Mono', monospace", fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--text-3)' };
@@ -13,6 +14,20 @@ function mono(): React.CSSProperties {
 
 function alignBtnStyle(): React.CSSProperties {
   return { flex: 1, height: 32, border: '1px solid var(--border)', borderRadius: 8, background: 'transparent', color: 'var(--text-2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' };
+}
+
+function FileMenuItem({ icon, label, onClick, disabled }: { icon: string; label: string; onClick: () => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      style={{ height: 34, padding: '0 10px', border: 0, borderRadius: 8, background: 'transparent', color: disabled ? 'var(--text-3)' : 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 12.5, cursor: disabled ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left' }}
+    >
+      <i className={icon} style={{ fontSize: 15, color: disabled ? 'var(--text-3)' : 'var(--text-2)' }} />
+      {label}
+    </button>
+  );
 }
 
 function IconBtn({ icon, title, onClick, danger, disabled }: { icon: string; title: string; onClick: (e: React.MouseEvent) => void; danger?: boolean; disabled?: boolean }) {
@@ -373,17 +388,20 @@ function findFreeformElement(pages: FreeformPage[], id: string): { page: Freefor
 // Every element is independently draggable/resizable/editable/deletable;
 // shift-click multi-selects and drags/deletes as a group; single-element
 // drags snap to nearby edges/centers; Ctrl/Cmd+Z and Shift+Ctrl/Cmd+Z
-// undo/redo. Not yet built: this draft doesn't feed into Publish's actual
-// downloadable HTML export yet -- see /preview for the read-only render of
-// it, which does work end to end.
+// undo/redo. The File menu (Save draft / Publish / Export) saves the whole
+// doc to My Projects (real localStorage persistence -- see saveFreeformProject
+// in store.tsx) and exports real rasterized PNG/JPG/PDF via html2canvas.
 export function Customize() {
   const { state, actions } = useApp();
   const navigate = useNavigate();
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [renamingPageId, setRenamingPageId] = useState<string | null>(null);
   const [renamingLayerId, setRenamingLayerId] = useState<string | null>(null);
+  const [fileMenuOpen, setFileMenuOpen] = useState(false);
+  const [exportBusy, setExportBusy] = useState<string | null>(null);
   const mainRef = useRef<HTMLElement>(null);
   const pageRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const surfaceRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const pages = state.freeform?.pages ?? [];
   const pageIdsKey = pages.map((p) => p.id).join(',');
@@ -474,15 +492,97 @@ export function Customize() {
     if (selected) actions.patchFreeformElement(selectedPage.id, selected.id, patch);
   }
 
+  function exportPages(): { name: string; el: HTMLDivElement }[] {
+    return pages.map((p) => ({ name: p.name, el: surfaceRefs.current[p.id] })).filter((x): x is { name: string; el: HTMLDivElement } => !!x.el);
+  }
+
+  async function coverThumb(): Promise<string | undefined> {
+    const el = surfaceRefs.current[pages[0]?.id];
+    if (!el) return undefined;
+    const thumb = await captureFreeformCoverThumb(el);
+    return thumb ?? undefined;
+  }
+
+  async function handleSaveDraft() {
+    setFileMenuOpen(false);
+    actions.selectFreeform(activePage.id, null);
+    const cover = await coverThumb();
+    actions.saveFreeformProject({ cover });
+  }
+
+  async function handlePublish() {
+    setFileMenuOpen(false);
+    actions.selectFreeform(activePage.id, null);
+    const cover = await coverThumb();
+    actions.saveFreeformProject({ publish: true, cover });
+  }
+
+  async function handleExport(format: 'png' | 'jpg' | 'pdf') {
+    setFileMenuOpen(false);
+    actions.selectFreeform(activePage.id, null);
+    setExportBusy(format);
+    // Let the deselect re-render (clears selection outlines/handles) commit
+    // before capturing, so the export never includes editing chrome.
+    await new Promise((r) => setTimeout(r, 60));
+    try {
+      const targets = exportPages();
+      if (format === 'pdf') await exportFreeformPagesAsPdf(targets, state.title || activePage.name);
+      else await exportFreeformPagesAsImages(targets, format, state.title || activePage.name);
+    } catch {
+      actions.say('Export failed — try again, or export fewer pages at once.');
+    } finally {
+      setExportBusy(null);
+    }
+  }
+
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--text)' }}>
       <header style={{ flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '12px 20px', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <Logo height={22} />
           <Link to="/templates" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-2)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 13, textDecoration: 'none' }}>
             <i className="ph ph-arrow-left" style={{ fontSize: 14 }} />
             Templates
           </Link>
+          <span style={{ width: 1, height: 20, background: 'var(--border)' }} />
+          <input
+            value={state.title}
+            onChange={(e) => actions.setTitle(e.target.value)}
+            placeholder="Untitled case study"
+            style={{ width: 200, height: 30, border: '1px solid transparent', borderRadius: 8, padding: '0 8px', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 13.5, color: 'var(--text)', background: 'transparent', outline: 'none' }}
+            onFocus={(e) => (e.currentTarget.style.border = '1px solid var(--border)')}
+            onBlur={(e) => (e.currentTarget.style.border = '1px solid transparent')}
+          />
+          {state.published && (
+            <span style={{ height: 22, padding: '0 8px', borderRadius: 999, background: 'var(--success-bg)', color: 'var(--success)', fontFamily: "'Geist Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <i className="ph-fill ph-check-circle" style={{ fontSize: 11 }} />
+              Published
+            </span>
+          )}
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              onClick={() => setFileMenuOpen((v) => !v)}
+              style={{ height: 30, padding: '0 12px', border: '1px solid var(--border)', borderRadius: 8, background: 'transparent', color: 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 12.5, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            >
+              File
+              <i className="ph ph-caret-down" style={{ fontSize: 11 }} />
+            </button>
+            {fileMenuOpen && (
+              <>
+                <div onClick={() => setFileMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 100 }} />
+                <div style={{ position: 'absolute', top: 36, left: 0, width: 220, zIndex: 101, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: 'var(--shadow-lg)', padding: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <FileMenuItem icon="ph ph-floppy-disk" label="Save as draft" onClick={handleSaveDraft} />
+                  <FileMenuItem icon="ph ph-rocket-launch" label="Publish" onClick={handlePublish} />
+                  <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
+                  <FileMenuItem icon="ph ph-file-png" label={exportBusy === 'png' ? 'Exporting…' : 'Export as PNG'} onClick={() => handleExport('png')} disabled={!!exportBusy} />
+                  <FileMenuItem icon="ph ph-file-jpg" label={exportBusy === 'jpg' ? 'Exporting…' : 'Export as JPG'} onClick={() => handleExport('jpg')} disabled={!!exportBusy} />
+                  <FileMenuItem icon="ph ph-file-pdf" label={exportBusy === 'pdf' ? 'Exporting…' : 'Export as PDF'} onClick={() => handleExport('pdf')} disabled={!!exportBusy} />
+                  <p style={{ margin: '4px 8px 2px', fontSize: 10.5, lineHeight: 1.5, color: 'var(--text-3)' }}>Multiple pages export as one PDF, or a .zip of PNG/JPG files.</p>
+                </div>
+              </>
+            )}
+          </div>
         </div>
         <span style={mono()}>Customizing · Feature Story</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -623,6 +723,9 @@ export function Customize() {
                     onPatch={(id, patch) => actions.patchFreeformElement(p.id, id, patch)}
                     onDelete={(ids) => actions.removeFreeformElements(p.id, ids)}
                     onResizeHeight={(height) => actions.setFreeformPageHeight(p.id, height)}
+                    onSurfaceRef={(el) => {
+                      surfaceRefs.current[p.id] = el;
+                    }}
                   />
                 </div>
               </div>

@@ -79,6 +79,15 @@ export interface ProjectSnapshot {
   previewLayout: AppState['previewLayout'];
   briefA: string;
   briefB: string;
+  // The freeform customize doc, present only for Feature Story projects
+  // saved from /templates/customize. Unlike the frames pipeline above (real
+  // screenshots live in memory-only blob URLs, so a reopened project can
+  // only restore its text/settings), a freeform doc has no such gap: every
+  // image is either a bundled asset path or a base64 data URI already
+  // written into the element itself, so this snapshot really is the whole
+  // project -- reopening restores the exact canvas, not just its settings.
+  freeform?: AppState['freeform'];
+  freeformTemplateMode?: AppState['templateMode'];
 }
 
 // Real, localStorage-backed project record -- ported from the live site's

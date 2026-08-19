@@ -17,6 +17,12 @@ export interface CoverModuleContent {
   // the ticket's explicit note that individual modules may use a dark
   // background as a chapter-break-style choice.
   dark?: boolean;
+  // Full-bleed photo backdrop behind the meta strip + mark, mirroring
+  // SectionDividerModuleContent's existing backgroundColorHex/
+  // backgroundImageUrl pattern (solid color OR an image, never both).
+  // Added on the real-reference correction pass: the real cover this
+  // module is modeled on is photo-first, not a flat color block.
+  backgroundImageUrl?: string;
 }
 
 // Section divider -- reusable chapter break, reused by every later section.

@@ -1,34 +1,46 @@
 import type { CoverModuleContent } from '../../../lib/templates/editorial-modules.types';
 
-// Editorial template, Module 1/5 -- the case study's opening frame. Flat
-// canvas with a 4-column meta strip (PROJECT / CATEGORY / DESIGNER / YEAR)
-// and a centered project mark. All colors/fonts resolve through
-// src/styles/tokens.css -- no hardcoded brand values here.
+// Editorial template, Module 1/5 -- the case study's opening frame.
+//
+// Layout corrected against a real, high-resolution reference case study
+// (not the earlier compressed screenshots): the real cover is a thin,
+// single-line meta overlay directly on a full-bleed photo backdrop --
+// "PRODUCTS" on the left, "DESIGNERS" + "YEAR" grouped on the right, no
+// separating border, no bordered 4-column grid block, and no separate
+// "Project" label (the brand name is carried by the mark itself, not a
+// text field). backgroundImageUrl is new here, mirroring the pattern
+// SectionDividerModuleContent already established (solid color OR an
+// image, never both) -- the real reference's cover is photo-first, which
+// the flat dark/light-only version this module shipped with couldn't
+// represent at all.
 export function CoverModule({ content }: { content: CoverModuleContent }) {
-  const { projectName, category, designerName, year, logoUrl, dark } = content;
-  const bg = dark ? '#14141A' : 'var(--bg)';
-  const textColor = dark ? '#FFFFFF' : 'var(--text)';
-  const mutedColor = dark ? 'rgba(255,255,255,0.55)' : 'var(--text-3)';
-  const borderColor = dark ? 'rgba(255,255,255,0.12)' : 'var(--border)';
+  const { projectName, category, designerName, year, logoUrl, dark, backgroundImageUrl } = content;
+  const hasImage = Boolean(backgroundImageUrl);
+  const bg = hasImage ? '#000000' : dark ? '#14141A' : 'var(--bg)';
+  const textColor = hasImage || dark ? '#FFFFFF' : 'var(--text)';
+  const mutedColor = hasImage || dark ? 'rgba(255,255,255,0.6)' : 'var(--text-3)';
 
   return (
-    <section style={{ position: 'relative', minHeight: 560, display: 'flex', flexDirection: 'column', background: bg, color: textColor }}>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-          gap: 24,
-          padding: '36px 48px',
-          borderBottom: `1px solid ${borderColor}`,
-        }}
-      >
-        <MetaItem label="Project" value={projectName} mutedColor={mutedColor} textColor={textColor} />
-        <MetaItem label="Category" value={category} mutedColor={mutedColor} textColor={textColor} />
-        <MetaItem label="Designer" value={designerName} mutedColor={mutedColor} textColor={textColor} />
-        <MetaItem label="Year" value={year} mutedColor={mutedColor} textColor={textColor} />
+    <section style={{ position: 'relative', minHeight: 560, display: 'flex', flexDirection: 'column', background: bg, color: textColor, overflow: 'hidden' }}>
+      {hasImage && (
+        <>
+          <img src={backgroundImageUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+          {/* Text-legibility wash over the photo -- the real reference's
+              photography is dark enough on its own; this is a disclosed
+              safety net for photos that aren't. */}
+          <span style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.15) 30%, rgba(0,0,0,0.35) 100%)' }} />
+        </>
+      )}
+
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '32px 48px', zIndex: 1 }}>
+        <MetaItem label="Products" value={category} mutedColor={mutedColor} textColor={textColor} />
+        <div style={{ display: 'flex', gap: 40 }}>
+          <MetaItem label="Designer" value={designerName} mutedColor={mutedColor} textColor={textColor} align="right" />
+          <MetaItem label="Year" value={year} mutedColor={mutedColor} textColor={textColor} align="right" />
+        </div>
       </div>
 
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 24px' }}>
+      <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 24px', zIndex: 1 }}>
         {logoUrl ? (
           <img src={logoUrl} alt={`${projectName} mark`} style={{ maxHeight: 96, maxWidth: '60%', objectFit: 'contain' }} />
         ) : (
@@ -39,13 +51,13 @@ export function CoverModule({ content }: { content: CoverModuleContent }) {
   );
 }
 
-function MetaItem({ label, value, mutedColor, textColor }: { label: string; value: string; mutedColor: string; textColor: string }) {
+function MetaItem({ label, value, mutedColor, textColor, align }: { label: string; value: string; mutedColor: string; textColor: string; align?: 'left' | 'right' }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, alignItems: align === 'right' ? 'flex-end' : 'flex-start' }}>
       <span
         style={{
           fontFamily: 'var(--font-mono)',
-          fontSize: 10.5,
+          fontSize: 10,
           fontWeight: 500,
           letterSpacing: 'var(--tracking-label-wide)',
           textTransform: 'uppercase',
@@ -57,8 +69,10 @@ function MetaItem({ label, value, mutedColor, textColor }: { label: string; valu
       <span
         style={{
           fontFamily: 'var(--font-body)',
-          fontSize: 14,
+          fontSize: 12.5,
           fontWeight: 600,
+          letterSpacing: '0.03em',
+          textTransform: 'uppercase',
           color: textColor,
           overflow: 'hidden',
           textOverflow: 'ellipsis',

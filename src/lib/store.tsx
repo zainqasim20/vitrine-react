@@ -1874,15 +1874,44 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const cx = FREEFORM_CANVAS_WIDTH / 2;
         const cy = page.height / 2;
         const rotate = tilted ? -6 : undefined;
+        // Every piece of this one mockup shares this id, so dragging any
+        // of them (frame, base bar, browser bar, screen) moves the whole
+        // thing as a single rigid unit -- see startMove in FreeformCanvas.
+        const groupId = freeformId('group');
         const els: FreeformElement[] = [];
 
-        const frame = (w: number, h: number, x: number, y: number, radius: number, fill = '#16161D', name = 'Mockup frame'): FreeformElement => {
+        // Real CSS, no image assets: a soft blurred dark ellipse sitting
+        // just under the frame reads as ambient contact shadow (using the
+        // existing shape blur field), and a brushed-metal gradient bezel
+        // instead of a flat fill reads as a real material rather than a
+        // flat rectangle. Still fully illustrative/CSS-rendered -- not a
+        // photographic mockup (a hand holding the device, a real desk
+        // scene) -- that needs either a real photo template asset or a
+        // reachable stock-photo source, neither available to fabricate
+        // here.
+        const shadow = (w: number, h: number, x: number, y: number, radius: number): FreeformElement => {
           z += 1;
-          return { id: freeformId('shape'), type: 'shape', x, y, w, h, zIndex: z, shape: 'rect', fill, borderRadius: radius, opacity: 1, rotate, name };
+          return { id: freeformId('shape'), type: 'shape', x: x - 6, y: y + 14, w: w + 12, h, zIndex: z, shape: 'rect', fill: '#000000', borderRadius: radius, opacity: 0.32, blur: 28, rotate, groupId, name: 'Mockup shadow' };
+        };
+        const frame = (w: number, h: number, x: number, y: number, radius: number, fill = 'linear-gradient(150deg, #3a3a46 0%, #17171d 55%, #050507 100%)', name = 'Mockup frame'): FreeformElement => {
+          z += 1;
+          return { id: freeformId('shape'), type: 'shape', x, y, w, h, zIndex: z, shape: 'rect', fill, borderRadius: radius, opacity: 1, rotate, groupId, name };
         };
         const screen = (w: number, h: number, x: number, y: number, radius: number): FreeformElement => {
           z += 1;
-          return { id: freeformId('image'), type: 'image', x, y, w, h, zIndex: z, src: FREEFORM_PLACEHOLDER_IMAGE, objectFit: 'cover', borderRadius: radius, locked: true, rotate, name: 'Mockup screen' };
+          return { id: freeformId('image'), type: 'image', x, y, w, h, zIndex: z, src: FREEFORM_PLACEHOLDER_IMAGE, objectFit: 'cover', borderRadius: radius, locked: true, rotate, groupId, name: 'Mockup screen' };
+        };
+        // A thin diagonal white-to-transparent sliver, skewed, laid over
+        // part of the screen at low opacity -- the same glass-glare cue
+        // real product-shot mockups use, built entirely from the gradient
+        // + skew fields this editor already has.
+        const glassGlare = (w: number, h: number, x: number, y: number): FreeformElement => {
+          z += 1;
+          return { id: freeformId('shape'), type: 'shape', x, y, w, h, zIndex: z, shape: 'rect', fill: 'linear-gradient(100deg, rgba(255,255,255,0.30) 0%, rgba(255,255,255,0.06) 45%, rgba(255,255,255,0) 60%)', borderRadius: 0, opacity: 1, skewX: -18, rotate, groupId, name: 'Mockup glare' };
+        };
+        const dot = (d: number, x: number, y: number, fill: string, name: string): FreeformElement => {
+          z += 1;
+          return { id: freeformId('shape'), type: 'shape', x, y, w: d, h: d, zIndex: z, shape: 'ellipse', fill, borderRadius: 0, opacity: 1, rotate, groupId, name };
         };
 
         if (kind === 'phone') {
@@ -1890,31 +1919,47 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const h = 460;
           const x = cx - w / 2;
           const y = cy - h / 2;
+          els.push(shadow(w, h, x, y, 36));
           els.push(frame(w, h, x, y, 36));
           els.push(screen(w - 16, h - 16, x + 8, y + 8, 28));
+          els.push(dot(7, x + w / 2 - 3.5, y + 12, 'radial-gradient(circle, #050507 0%, #1c1c24 70%, #050507 100%)', 'Mockup camera'));
+          els.push(glassGlare(w * 0.34, h - 16, x + 8, y + 8));
         } else if (kind === 'tablet') {
           const w = 420;
           const h = 320;
           const x = cx - w / 2;
           const y = cy - h / 2;
+          els.push(shadow(w, h, x, y, 22));
           els.push(frame(w, h, x, y, 22));
           els.push(screen(w - 24, h - 24, x + 12, y + 12, 12));
+          els.push(dot(6, x + w - 20, y + h / 2 - 3, 'radial-gradient(circle, #050507 0%, #1c1c24 70%, #050507 100%)', 'Mockup camera'));
+          els.push(glassGlare(w * 0.3, h - 24, x + 12, y + 12));
         } else if (kind === 'laptop') {
           const w = 560;
           const h = 360;
           const x = cx - w / 2;
           const y = cy - h / 2;
+          els.push(shadow(w + 60, 26, x - 30, y + h + 4, 10));
           els.push(frame(w, h, x, y, 14));
           els.push(screen(w - 24, h - 48, x + 12, y + 12, 4));
-          els.push(frame(w + 60, 14, x - 30, y + h + 6, 6, '#2A2A34', 'Mockup base'));
+          els.push(dot(4, x + w / 2 - 2, y + 5, '#050507', 'Mockup camera'));
+          els.push(frame(w + 60, 14, x - 30, y + h + 6, 6, 'linear-gradient(180deg, #3a3a46 0%, #201f26 100%)', 'Mockup base'));
+          els.push(glassGlare(w * 0.3, h - 48, x + 12, y + 12));
         } else {
           const w = 640;
           const h = 420;
           const x = cx - w / 2;
           const y = cy - h / 2;
+          els.push(shadow(w, h, x, y, 12));
           els.push(frame(w, h, x, y, 12));
-          els.push(frame(w, 26, x, y, 12, '#2A2A34', 'Mockup browser bar'));
+          els.push(frame(w, 26, x, y, 12, 'linear-gradient(180deg, #34343f 0%, #202027 100%)', 'Mockup browser bar'));
+          els.push(dot(8, x + 12, y + 9, '#FF5F57', 'Mockup traffic light'));
+          els.push(dot(8, x + 28, y + 9, '#FEBC2E', 'Mockup traffic light'));
+          els.push(dot(8, x + 44, y + 9, '#28C840', 'Mockup traffic light'));
+          z += 1;
+          els.push({ id: freeformId('shape'), type: 'shape', x: x + 64, y: y + 5, w: w - 100, h: 16, zIndex: z, shape: 'rect', fill: '#3a3a46', borderRadius: 8, opacity: 0.8, rotate, groupId, name: 'Mockup address bar' });
           els.push(screen(w, h - 26, x, y + 26, 0));
+          els.push(glassGlare(w * 0.25, h - 26, x, y + 26));
         }
 
         return {
@@ -1934,7 +1979,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const el = page?.elements.find((e) => e.id === elementId);
         if (!page || !el) return {};
         const z = freeformMaxZ(page.elements) + 1;
-        const copy: FreeformElement = { ...el, id: freeformId(el.type), x: el.x + 20, y: el.y + 20, zIndex: z };
+        // Duplicating just one piece of a mockup on its own breaks the
+        // pairing anyway (its sibling pieces aren't being copied), so the
+        // copy starts ungrouped rather than silently fusing itself to the
+        // ORIGINAL mockup's other pieces.
+        const copy: FreeformElement = { ...el, id: freeformId(el.type), x: el.x + 20, y: el.y + 20, zIndex: z, groupId: undefined };
         return {
           freeform: mapFreeformPage(s.freeform, pageId, (p) => ({ ...p, elements: [...p.elements, copy] })),
           freeformSelectedIds: [copy.id],
@@ -1952,11 +2001,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (!page) return {};
         const idSet = new Set(elementIds);
         let z = freeformMaxZ(page.elements);
+        // A duplicated group of mockup pieces should stay linked to each
+        // OTHER, not to the original mockup -- remap each distinct source
+        // groupId to one freshly generated id, shared only among this
+        // batch's own copies.
+        const groupIdMap = new Map<string, string>();
         const copies: FreeformElement[] = page.elements
           .filter((el) => idSet.has(el.id))
           .map((el) => {
             z += 1;
-            return { ...el, id: freeformId(el.type), x: el.x + 20, y: el.y + 20, zIndex: z };
+            let newGroupId: string | undefined;
+            if (el.groupId) {
+              newGroupId = groupIdMap.get(el.groupId);
+              if (!newGroupId) {
+                newGroupId = freeformId('group');
+                groupIdMap.set(el.groupId, newGroupId);
+              }
+            }
+            return { ...el, id: freeformId(el.type), x: el.x + 20, y: el.y + 20, zIndex: z, groupId: newGroupId };
           });
         return {
           freeform: mapFreeformPage(s.freeform, pageId, (p) => ({ ...p, elements: [...p.elements, ...copies] })),

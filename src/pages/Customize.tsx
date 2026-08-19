@@ -52,6 +52,54 @@ function isGradientCss(v: string): boolean {
   return /^(linear|radial|conic)-gradient\(/.test(v);
 }
 
+// A compact editable number, for the couple of spots (gradient angle, stop
+// position) where a fixed-width read-only number sat next to a range
+// input -- same commit-on-blur/Enter pattern as NumberField/SliderField,
+// just small enough to sit inline.
+function MiniNumberInput({ value, onCommit, width = 32, min, max }: { value: number; onCommit: (n: number) => void; width?: number; min?: number; max?: number }) {
+  const [text, setText] = useState(String(value));
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    if (!focused) setText(String(value));
+  }, [value, focused]);
+
+  function commit() {
+    const n = Number(text);
+    if (text.trim() === '' || !Number.isFinite(n)) {
+      setText(String(value));
+      return;
+    }
+    let clamped = n;
+    if (min !== undefined) clamped = Math.max(min, clamped);
+    if (max !== undefined) clamped = Math.min(max, clamped);
+    onCommit(clamped);
+    setText(String(clamped));
+  }
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={text}
+      onFocus={() => setFocused(true)}
+      onChange={(e) => setText(e.target.value.replace(/[^0-9.-]/g, ''))}
+      onBlur={() => {
+        setFocused(false);
+        commit();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur();
+        if (e.key === 'Escape') {
+          setText(String(value));
+          e.currentTarget.blur();
+        }
+      }}
+      style={{ width, height: 20, border: '1px solid var(--border)', borderRadius: 5, padding: '0 4px', fontFamily: "'Geist Mono', monospace", fontSize: 11, color: 'var(--text-2)', background: 'transparent', outline: 'none', textAlign: 'right', flex: 'none' }}
+    />
+  );
+}
+
 // The Media tab writes exactly this shorthand (see MediaFillPicker below),
 // so recognizing it is just checking the prefix -- same round-trip
 // approach as isGradientCss/parseFreeformGradient above.
@@ -84,7 +132,8 @@ function GradientEditor({ value, onChange }: { value: string; onChange: (css: st
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={mono()}>Angle</span>
           <input type="range" min={0} max={360} value={g.angle} onChange={(e) => update({ ...g, angle: Number(e.target.value) })} style={{ flex: 1, accentColor: 'var(--violet)' }} />
-          <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 11, color: 'var(--text-2)', width: 32, textAlign: 'right' }}>{g.angle}°</span>
+          <MiniNumberInput value={g.angle} min={0} max={360} onCommit={(angle) => update({ ...g, angle })} />
+          <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 11, color: 'var(--text-3)' }}>°</span>
         </div>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -103,7 +152,8 @@ function GradientEditor({ value, onChange }: { value: string; onChange: (css: st
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <input type="color" value={s.color} onChange={(e) => update({ ...g, stops: g.stops.map((st, j) => (j === i ? { ...st, color: e.target.value } : st)) })} style={{ width: 28, height: 28, padding: 0, border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', background: 'none', flex: 'none' }} />
             <input type="range" min={0} max={100} value={s.position} onChange={(e) => update({ ...g, stops: g.stops.map((st, j) => (j === i ? { ...st, position: Number(e.target.value) } : st)) })} style={{ flex: 1, accentColor: 'var(--violet)' }} />
-            <span style={{ fontSize: 10.5, fontFamily: "'Geist Mono', monospace", color: 'var(--text-3)', width: 30, textAlign: 'right', flex: 'none' }}>{s.position}%</span>
+            <MiniNumberInput value={s.position} min={0} max={100} width={30} onCommit={(position) => update({ ...g, stops: g.stops.map((st, j) => (j === i ? { ...st, position } : st)) })} />
+            <span style={{ fontSize: 10.5, fontFamily: "'Geist Mono', monospace", color: 'var(--text-3)', flex: 'none' }}>%</span>
             {g.stops.length > 2 && <IconBtn icon="ph ph-x" title="Remove stop" onClick={() => update({ ...g, stops: g.stops.filter((_, j) => j !== i) })} />}
           </div>
         ))}
@@ -445,15 +495,56 @@ function NumberField({ label, value, onChange, min, max }: { label: string; valu
   );
 }
 
+// The value next to the label used to be read-only text -- a slider alone
+// can't reliably land on an exact number, so this is now a real editable
+// field (same commit-on-blur/Enter pattern as NumberField) sitting right
+// next to the slider it mirrors; dragging and typing both write the same
+// value, whichever's more precise for the moment.
 function SliderField({ label, value, onChange, min, max, displaySuffix = '' }: { label: string; value: number; onChange: (n: number) => void; min: number; max: number; displaySuffix?: string }) {
+  const [text, setText] = useState(String(value));
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    if (!focused) setText(String(value));
+  }, [value, focused]);
+
+  function commit() {
+    const n = Number(text);
+    if (text.trim() === '' || !Number.isFinite(n)) {
+      setText(String(value));
+      return;
+    }
+    const clamped = Math.max(min, Math.min(max, n));
+    onChange(clamped);
+    setText(String(clamped));
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={mono()}>{label}</span>
-        <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 11, color: 'var(--text-2)' }}>
-          {value}
-          {displaySuffix}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={text}
+            onFocus={() => setFocused(true)}
+            onChange={(e) => setText(e.target.value.replace(/[^0-9.-]/g, ''))}
+            onBlur={() => {
+              setFocused(false);
+              commit();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.currentTarget.blur();
+              if (e.key === 'Escape') {
+                setText(String(value));
+                e.currentTarget.blur();
+              }
+            }}
+            style={{ width: 40, height: 20, border: '1px solid var(--border)', borderRadius: 5, padding: '0 4px', fontFamily: "'Geist Mono', monospace", fontSize: 11, color: 'var(--text-2)', background: 'transparent', outline: 'none', textAlign: 'right' }}
+          />
+          {displaySuffix && <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 11, color: 'var(--text-3)' }}>{displaySuffix}</span>}
+        </div>
       </div>
       <input type="range" min={min} max={max} value={value} onChange={(e) => onChange(Number(e.target.value))} style={{ width: '100%', accentColor: 'var(--violet)' }} />
     </div>
@@ -1189,8 +1280,12 @@ export function Customize() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
                       <SliderField label="Zoom" min={100} max={400} value={Math.round((selected.zoom ?? 1) * 100)} onChange={(v) => patchSelected({ zoom: v / 100 })} displaySuffix="%" />
                       <p style={{ margin: 0, fontSize: 11.5, lineHeight: 1.5, color: 'var(--text-3)' }}>
-                        {selected.locked ? "Locked in its frame — " : ''}Drag the image on the canvas to pan, drag a handle to zoom.
-                        {selected.locked ? " The frame itself won't move or resize." : ' Switch back to Fill or Fit to move/resize normally again.'}
+                        Zoom stays centered and clipped to the frame — it can never spill outside it. Drag a handle on the canvas to zoom, or the number above.{' '}
+                        {selected.groupId
+                          ? 'This is part of a mockup — drag any piece of it on the canvas to move the whole thing.'
+                          : selected.locked
+                            ? "This frame is locked in place and won't move or resize."
+                            : 'Switch back to Fill or Fit to move/resize this image normally again.'}
                       </p>
                     </div>
                   )}
@@ -1221,13 +1316,7 @@ export function Customize() {
                 <>
                   <ColorField label="Fill" value={selected.fill} onChange={(fill) => patchSelected({ fill })} allowMedia />
                   <NumberField label="Corner radius" value={selected.borderRadius} min={0} max={999} onChange={(borderRadius) => patchSelected({ borderRadius })} />
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-                      <span style={mono()}>Opacity</span>
-                      <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 11.5, color: 'var(--text-2)' }}>{Math.round(selected.opacity * 100)}%</span>
-                    </div>
-                    <input type="range" min={0} max={100} value={Math.round(selected.opacity * 100)} onChange={(e) => patchSelected({ opacity: Number(e.target.value) / 100 })} style={{ width: '100%', accentColor: 'var(--violet)' }} />
-                  </div>
+                  <SliderField label="Opacity" min={0} max={100} value={Math.round(selected.opacity * 100)} onChange={(v) => patchSelected({ opacity: v / 100 })} displaySuffix="%" />
                   {(selected.shape === 'rect' || selected.shape === 'ellipse') && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1286,7 +1375,7 @@ export function Customize() {
 
               {!(selected.type === 'image' && (selected.locked || selected.cropEnabled)) && (
                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
-                  <div style={{ flex: 1 }}>
+                  <div style={{ width: 76, flex: 'none' }}>
                     <NumberField
                       label="W"
                       value={selected.w}
@@ -1308,7 +1397,7 @@ export function Customize() {
                   >
                     <i className={aspectLocked ? 'ph-fill ph-link-simple' : 'ph ph-link-simple-break'} style={{ fontSize: 14 }} />
                   </button>
-                  <div style={{ flex: 1 }}>
+                  <div style={{ width: 76, flex: 'none' }}>
                     <NumberField
                       label="H"
                       value={selected.h}

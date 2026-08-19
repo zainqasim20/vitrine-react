@@ -200,28 +200,6 @@ export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete,
     onSelect(next.id, false);
   }
 
-  // Pans a locked image's content within its frozen frame -- the frame's
-  // own x/y/w/h are never touched here, only focalX/focalY.
-  function startImagePan(e: React.PointerEvent, el: FreeformImageElement) {
-    e.stopPropagation();
-    const startFocalX = el.focalX ?? 50;
-    const startFocalY = el.focalY ?? 50;
-    const zoom = Math.max(1, el.zoom ?? 1);
-    const sx = e.clientX;
-    const sy = e.clientY;
-    const mv = (ev: PointerEvent) => {
-      const dxPct = ((ev.clientX - sx) / el.w) * 100 * 1.5 * (1 / zoom);
-      const dyPct = ((ev.clientY - sy) / el.h) * 100 * 1.5 * (1 / zoom);
-      onPatch(el.id, { focalX: Math.max(0, Math.min(100, startFocalX - dxPct)), focalY: Math.max(0, Math.min(100, startFocalY - dyPct)) });
-    };
-    const up = () => {
-      window.removeEventListener('pointermove', mv);
-      window.removeEventListener('pointerup', up);
-    };
-    window.addEventListener('pointermove', mv);
-    window.addEventListener('pointerup', up);
-  }
-
   function startMove(e: React.PointerEvent, el: FreeformElement) {
     if (editingTextId === el.id) return;
     e.stopPropagation();
@@ -239,15 +217,34 @@ export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete,
       onSelect(el.id, false);
     }
 
-    const isCropImage = el.type === 'image' && (el.locked || (el as FreeformImageElement).cropEnabled);
-    if (el.locked || isCropImage) {
-      // The frame itself is frozen (either because the element is locked,
-      // or because an unlocked image has Crop mode on) -- but for an
-      // image, dragging still does something real: it pans the content
-      // inside the frame.
-      if (isCropImage && selectedIds.length <= 1) startImagePan(e, el as FreeformImageElement);
+    // A grouped element (a mockup's frame + screen, inserted together via
+    // the Mockup toolbar) always drags as one fused unit, no matter which
+    // piece you grab and regardless of any individual `locked` flag on its
+    // members -- "move the mockup" means move all of it. This is now the
+    // ONLY way a locked/crop image's frame position ever changes -- there
+    // is no more drag-to-pan on the image content itself (see the image
+    // render above: it always zooms from dead center, clipped by the
+    // frame's own overflow:hidden, so the zoomed-in part can never
+    // visually escape the frame no matter how far it's zoomed).
+    if (el.groupId) {
+      const starts = page.elements.filter((e2) => e2.groupId === el.groupId).map((e2) => ({ id: e2.id, x: e2.x, y: e2.y }));
+      const sx = e.clientX;
+      const sy = e.clientY;
+      const mv = (ev: PointerEvent) => {
+        const dx = ev.clientX - sx;
+        const dy = ev.clientY - sy;
+        for (const s of starts) onPatch(s.id, { x: Math.round(s.x + dx), y: Math.round(s.y + dy) });
+      };
+      const up = () => {
+        window.removeEventListener('pointermove', mv);
+        window.removeEventListener('pointerup', up);
+      };
+      window.addEventListener('pointermove', mv);
+      window.addEventListener('pointerup', up);
       return;
     }
+
+    if (el.locked) return; // frozen, no group -- nothing left to drag
 
     const dragIds = additive ? [...selectedIds, el.id] : alreadySelected ? selectedIds : [el.id];
     const group = page.elements.filter((e2) => dragIds.includes(e2.id) && !e2.locked);
@@ -425,7 +422,12 @@ export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete,
             height: el.h,
             zIndex: el.zIndex,
             transform: el.rotate ? `rotate(${el.rotate}deg)` : undefined,
-            cursor: readOnly ? 'default' : editingTextId === el.id ? 'text' : isCropImage ? 'grab' : el.locked ? 'default' : 'move',
+            // Grouped pieces (a mockup's frame + screen) always move
+            // together, so they read as "move" even if this particular
+            // piece is individually locked. A locked, ungrouped element
+            // (or a locked/crop image's own content, which now only
+            // zooms via its resize handles, never pans) shows "default".
+            cursor: readOnly ? 'default' : editingTextId === el.id ? 'text' : el.groupId ? 'move' : el.locked ? 'default' : 'move',
           };
 
           return (
@@ -496,29 +498,42 @@ export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete,
                   </div>
                 ))}
 
-              {el.type === 'image' && (
-                <div style={{ width: '100%', height: '100%', overflow: 'hidden', borderRadius: el.borderRadius, position: 'relative' }}>
-                  <img
-                    src={el.src}
-                    alt=""
-                    draggable={false}
-                    style={{
-                      position: 'absolute',
-                      inset: 0,
-                      width: '100%',
-                      height: '100%',
-                      objectFit: el.objectFit,
-                      objectPosition: `${el.focalX ?? 50}% ${el.focalY ?? 50}%`,
-                      transform: el.zoom && el.zoom !== 1 ? `scale(${el.zoom})` : undefined,
-                      transformOrigin: `${el.focalX ?? 50}% ${el.focalY ?? 50}%`,
-                      display: 'block',
-                      pointerEvents: 'none',
-                      opacity: el.opacity ?? 1,
-                      filter: freeformImageFilter(el) || undefined,
-                    }}
-                  />
-                </div>
-              )}
+              {el.type === 'image' &&
+                (() => {
+                  // A locked/crop-mode image never pans -- there's no more
+                  // drag-to-reposition (see startMove: dragging now either
+                  // moves the whole mockup group or does nothing). So its
+                  // content always grows from dead center, which combined
+                  // with this wrapper's overflow:hidden means the zoomed-in
+                  // part is simply clipped -- it can never visually escape
+                  // the frame, and there's no focal point left to explain.
+                  const isCropImage = el.locked || el.cropEnabled;
+                  const originPct = isCropImage ? 50 : (el.focalX ?? 50);
+                  const originPctY = isCropImage ? 50 : (el.focalY ?? 50);
+                  return (
+                    <div style={{ width: '100%', height: '100%', overflow: 'hidden', borderRadius: el.borderRadius, position: 'relative' }}>
+                      <img
+                        src={el.src}
+                        alt=""
+                        draggable={false}
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          width: '100%',
+                          height: '100%',
+                          objectFit: el.objectFit,
+                          objectPosition: `${originPct}% ${originPctY}%`,
+                          transform: el.zoom && el.zoom !== 1 ? `scale(${el.zoom})` : undefined,
+                          transformOrigin: `${originPct}% ${originPctY}%`,
+                          display: 'block',
+                          pointerEvents: 'none',
+                          opacity: el.opacity ?? 1,
+                          filter: freeformImageFilter(el) || undefined,
+                        }}
+                      />
+                    </div>
+                  );
+                })()}
 
               {el.type === 'shape' && renderShapeContent(el)}
 

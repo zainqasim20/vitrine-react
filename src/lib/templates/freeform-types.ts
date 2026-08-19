@@ -41,6 +41,14 @@ interface FreeformElementBase {
   // tilt, which would need a group/parent concept this flat element list
   // doesn't have. Good enough for "mockup at an angle"; not a real 3D scene.
   rotate?: number;
+  // Fuses this element to every other element sharing the same id into one
+  // rigid unit for dragging -- used by mockups (frame + screen, inserted
+  // together) so moving any one piece moves the whole mockup, which is the
+  // only way a locked/crop image's frame position changes now (there's no
+  // more drag-to-pan on the image content -- see FreeformCanvas). Purely a
+  // move-together relationship, not a resize/scale-together one: each
+  // member still resizes independently from its own handles.
+  groupId?: string;
 }
 
 export interface FreeformTextElement extends FreeformElementBase {

@@ -7,6 +7,7 @@ import type { FreeformElement, FreeformElementType, FreeformGradient, FreeformPa
 import { buildFreeformGradientCss, FREEFORM_SCENERY_PRESETS, FREEFORM_VIBRANT_PRESETS, parseFreeformGradient } from '../lib/templates/freeform-types';
 import { FONT_CATEGORY_LABELS, GOOGLE_FONTS, loadGoogleFont, resolveFreeformFontCss, type GoogleFontCategory } from '../lib/templates/google-fonts';
 import { captureFreeformCoverThumb, exportFreeformPagesAsImages, exportFreeformPagesAsPdf } from '../lib/templates/freeform-export';
+import type { PexelsPhoto } from '../lib/types';
 
 function mono(): React.CSSProperties {
   return { fontFamily: "'Geist Mono', monospace", fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--text-3)' };
@@ -197,36 +198,142 @@ function GradientEditor({ value, onChange }: { value: string; onChange: (css: st
 // change than this pass covers -- disclosed in the empty state below
 // rather than faked with a static poster frame.
 function MediaFillPicker({ value, onChange }: { value: string | null; onChange: (css: string) => void }) {
+  const { state } = useApp();
   const inputRef = useRef<HTMLInputElement>(null);
+  const [mode, setMode] = useState<'upload' | 'search'>(state.apiStatus.pexels ? 'search' : 'upload');
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ height: 100, borderRadius: 8, border: '1px solid var(--border)', background: value ?? 'var(--surface-2)', display: value ? undefined : 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {!value && <i className="ph ph-image" style={{ fontSize: 22, color: 'var(--text-3)' }} />}
       </div>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*"
-        style={{ display: 'none' }}
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          e.target.value = '';
-          if (!file) return;
-          const reader = new FileReader();
-          reader.onload = () => {
-            if (typeof reader.result === 'string') onChange(`url(${reader.result}) center/cover no-repeat`);
-          };
-          reader.readAsDataURL(file);
-        }}
-      />
-      <button
-        type="button"
-        onClick={() => inputRef.current?.click()}
-        style={{ height: 34, border: '1px solid var(--border)', borderRadius: 8, background: 'transparent', color: 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}
-      >
-        {value ? 'Replace image' : 'Upload image'}
-      </button>
+      <div style={{ display: 'flex', gap: 4 }}>
+        <button type="button" onClick={() => setMode('search')} style={tabBtnStyle(mode === 'search')}>
+          Search photos
+        </button>
+        <button type="button" onClick={() => setMode('upload')} style={tabBtnStyle(mode === 'upload')}>
+          Upload
+        </button>
+      </div>
+      {mode === 'search' ? (
+        <StockPhotoSearch onPick={onChange} />
+      ) : (
+        <>
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              if (!file) return;
+              const reader = new FileReader();
+              reader.onload = () => {
+                if (typeof reader.result === 'string') onChange(`url(${reader.result}) center/cover no-repeat`);
+              };
+              reader.readAsDataURL(file);
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            style={{ height: 34, border: '1px solid var(--border)', borderRadius: 8, background: 'transparent', color: 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}
+          >
+            {value ? 'Replace image' : 'Upload image'}
+          </button>
+        </>
+      )}
       <p style={{ margin: 0, fontSize: 11, lineHeight: 1.5, color: 'var(--text-3)' }}>Video fill isn't available yet — only image fills work here.</p>
+    </div>
+  );
+}
+
+// Real Pexels search, not a stand-in -- hits the exact same /api/pexels-search
+// route the Templates gallery already uses (see fetchStockPhoto in store.tsx),
+// just with more results per query (perPage=20 vs that path's perPage=1) and
+// its own local state, since this needs a browsable grid rather than one
+// cached photo per fixed category query. Picking a result writes the same
+// `url(...) center/cover no-repeat` shorthand the Upload tab does, so it
+// slots into fill/background exactly the same way -- a real photographer's
+// photo becomes the shape/button/page's fill via its real hosted URL (not
+// downloaded/re-encoded), same as how the Templates gallery already
+// references Pexels images directly rather than mirroring them.
+function StockPhotoSearch({ onPick }: { onPick: (css: string) => void }) {
+  const { state } = useApp();
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [results, setResults] = useState<PexelsPhoto[]>([]);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  function runSearch() {
+    const q = query.trim();
+    if (!q || status === 'loading') return;
+    setStatus('loading');
+    setErrorMsg('');
+    fetch(`/api/pexels-search?query=${encodeURIComponent(q)}&perPage=20`)
+      .then((r) => r.json())
+      .then((data: { photos?: PexelsPhoto[]; error?: string }) => {
+        if (data.error || !data.photos) {
+          setStatus('error');
+          setErrorMsg(data.error || 'No results');
+          setResults([]);
+          return;
+        }
+        setResults(data.photos);
+        setStatus(data.photos.length ? 'idle' : 'error');
+        if (!data.photos.length) setErrorMsg(`No results for "${q}"`);
+      })
+      .catch((e: Error) => {
+        setStatus('error');
+        setErrorMsg(e.message);
+      });
+  }
+
+  if (state.apiStatus.checked && !state.apiStatus.pexels) {
+    return (
+      <p style={{ margin: 0, fontSize: 11.5, lineHeight: 1.6, color: 'var(--text-3)' }}>
+        Real photo search needs a Pexels API key set as <code>PEXELS_API_KEY</code> in the environment — the same key the Templates gallery already uses. Once it's set there, search works here too automatically, nothing else to configure.
+      </p>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') runSearch();
+          }}
+          placeholder="Search real photos…"
+          style={{ flex: 1, height: 32, border: '1px solid var(--border)', borderRadius: 8, padding: '0 10px', fontSize: 12.5, outline: 'none', background: 'transparent', color: 'var(--text)' }}
+        />
+        <button
+          type="button"
+          onClick={runSearch}
+          disabled={status === 'loading' || !query.trim()}
+          style={{ height: 32, padding: '0 12px', border: '1px solid var(--border)', borderRadius: 8, background: 'transparent', color: 'var(--text)', fontSize: 12, fontWeight: 700, cursor: status === 'loading' ? 'default' : 'pointer' }}
+        >
+          {status === 'loading' ? '…' : 'Search'}
+        </button>
+      </div>
+      {status === 'error' && <p style={{ margin: 0, fontSize: 11.5, color: 'var(--error)' }}>{errorMsg}</p>}
+      {results.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
+          {results.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              title={`Photo by ${p.photographer} on Pexels`}
+              onClick={() => onPick(`url(${p.src}) center/cover no-repeat`)}
+              style={{ height: 64, borderRadius: 6, border: '1px solid var(--border)', background: `url(${p.thumb}) center/cover`, cursor: 'pointer', padding: 0 }}
+            />
+          ))}
+        </div>
+      )}
+      <p style={{ margin: 0, fontSize: 10, lineHeight: 1.5, color: 'var(--text-3)' }}>Real photos via Pexels — hover a result to see its photographer. Free to use; attribution appreciated but not required.</p>
     </div>
   );
 }

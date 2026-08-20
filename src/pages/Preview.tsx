@@ -7,6 +7,7 @@ import { NarrationIntro } from '../components/NarrationIntro';
 import { deviceFrameBoxStyle, deviceFrameKindFor, DeviceChrome } from '../components/DeviceFrame';
 import { GeneratedFrameArt } from '../components/GeneratedFrameArt';
 import { FreeformCanvas } from '../components/customize/FreeformCanvas';
+import { ThemeSwitch } from '../components/ThemeSwitch';
 
 // Real, public case-study preview -- ported from the live site's
 // renderPreview()/renderPreviewSection() family. Reads the same
@@ -125,7 +126,7 @@ export function Preview() {
                 type="button"
                 title={l.label}
                 onClick={() => actions.setPreviewLayout(l.key)}
-                style={{ width: 34, height: 34, border: 0, borderRadius: 999, background: on ? 'var(--surface)' : 'transparent', color: on ? 'var(--violet-deep)' : 'var(--text-3)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                style={{ width: 34, height: 34, border: 0, borderRadius: 999, background: on ? 'var(--surface)' : 'transparent', color: on ? 'var(--on-violet-light)' : 'var(--text-3)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
               >
                 <i className={l.icon} style={{ fontSize: 16 }} />
               </button>
@@ -162,6 +163,7 @@ export function Preview() {
             );
           })}
         </div>
+        <ThemeSwitch size={30} />
       </div>
 
       <div style={{ maxWidth: 760, margin: '0 auto', padding: '56px 24px 0' }}>

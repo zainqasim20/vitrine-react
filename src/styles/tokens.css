@@ -22,6 +22,12 @@
   --violet: #7A47F5;
   --violet-deep: #6038EE;
   --violet-light: #F3EFFE;
+  /* Text/icon color to pair with a --violet-light background. Equal to
+     --violet-deep here (unchanged from before this token existed); dark
+     mode below swaps it to a lighter violet since --violet-deep text is
+     only ~2:1 against any dark surface. Use this instead of hardcoding
+     --violet-deep on anything sitting on a --violet-light background. */
+  --on-violet-light: var(--violet-deep);
   --violet-gradient: linear-gradient(135deg, #6038EE 0%, #AD5BFC 100%);
   --blue: #2B8FF5;
   --blue-deep: #224EF3;
@@ -75,6 +81,18 @@
   /* #77777F measured 4.27:1 on this dark bg -- just under WCAG AA's
      4.5:1 for normal text. #8A8A93 hits ~5.5:1, same hue/weight. */
   --text-3: #8A8A93;
+
+  /* --violet-light was a flat #F3EFFE (light lavender) in every theme --
+     opaque and unchanged in dark mode, so it read as a pale, out-of-place
+     card sitting on a near-black surface. Swapped to a translucent violet
+     wash that composites against --surface (#18181D) to roughly #2A2044 --
+     still reads as "the active/selected violet chip" but actually belongs
+     to the dark palette instead of being pasted from light mode.
+     --on-violet-light moves to a lighter violet to match: #6038EE text on
+     that composited background is only ~2:1 (fails), #D4C4FF measures
+     ~9.5:1. */
+  --violet-light: rgba(122, 71, 245, 0.18);
+  --on-violet-light: #D4C4FF;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -91,5 +109,9 @@
     /* #77777F measured 4.27:1 on this dark bg -- just under WCAG AA's
      4.5:1 for normal text. #8A8A93 hits ~5.5:1, same hue/weight. */
   --text-3: #8A8A93;
+
+    /* See [data-theme="dark"] above for rationale. */
+    --violet-light: rgba(122, 71, 245, 0.18);
+    --on-violet-light: #D4C4FF;
   }
 }

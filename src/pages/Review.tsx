@@ -71,14 +71,13 @@ export function Review() {
             <button
               type="button"
               onClick={() => setTplOpen((v) => !v)}
-              style={{ height: 32, padding: '0 12px', border: `1px solid ${tplOpen ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 999, background: tplOpen ? 'var(--violet-light)' : 'transparent', color: tplOpen ? '#14141A' : 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 500, fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}
+              style={{ height: 32, padding: '0 12px', border: `1px solid ${tplOpen ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 999, background: tplOpen ? 'var(--violet-light)' : 'transparent', color: tplOpen ? 'var(--on-violet-light)' : 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 500, fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}
             >
-              {/* This pill's background switches to the always-light
-                  --violet-light when open -- var(--text)/text-3 turn
-                  near-white in dark mode and go low-contrast against it. */}
-              <span style={{ color: tplOpen ? '#55555F' : 'var(--text-3)' }}>Template:</span>
+              {/* --violet-light adapts per theme (see tokens.css);
+                  --on-violet-light is its matching text color. */}
+              <span style={{ color: tplOpen ? 'var(--on-violet-light)' : 'var(--text-3)', opacity: tplOpen ? 0.85 : 1 }}>Template:</span>
               {state.template}
-              <i className={tplOpen ? 'ph ph-caret-up' : 'ph ph-caret-down'} style={{ fontSize: 14, color: tplOpen ? '#55555F' : 'var(--text-3)' }} />
+              <i className={tplOpen ? 'ph ph-caret-up' : 'ph ph-caret-down'} style={{ fontSize: 14, color: tplOpen ? 'var(--on-violet-light)' : 'var(--text-3)' }} />
             </button>
 
             {tplOpen && (
@@ -99,7 +98,7 @@ export function Review() {
                         <div style={{ aspectRatio: '4 / 3', background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: 10 }} />
                         <div style={{ padding: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
                           <span style={{ flex: 1, fontSize: 13, fontWeight: 700 }}>{name}</span>
-                          <i className={on ? 'ph-fill ph-check-circle' : 'ph ph-circle'} style={{ fontSize: 15, color: on ? 'var(--violet-deep)' : 'var(--border-strong)' }} />
+                          <i className={on ? 'ph-fill ph-check-circle' : 'ph ph-circle'} style={{ fontSize: 15, color: on ? 'var(--on-violet-light)' : 'var(--border-strong)' }} />
                         </div>
                       </div>
                     );
@@ -250,7 +249,7 @@ export function Review() {
           {status === 'drafted' && idx === 1 && !state.fuOff && (
             <div style={{ marginTop: 20, border: '1px solid var(--border)', borderRadius: 16, padding: 20, display: 'flex', flexDirection: 'column', gap: 14, animation: 'v-in 240ms ease-out' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ height: 22, padding: '0 8px', borderRadius: 999, background: 'var(--violet-light)', color: 'var(--violet-deep)', fontFamily: "'Geist Mono', monospace", fontSize: 11.5, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ height: 22, padding: '0 8px', borderRadius: 999, background: 'var(--violet-light)', color: 'var(--on-violet-light)', fontFamily: "'Geist Mono', monospace", fontSize: 11.5, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                   <i className="ph ph-question" style={{ fontSize: 12 }} />
                   Low confidence
                 </span>
@@ -260,7 +259,7 @@ export function Review() {
                 {['Deliberate', 'Inherited constraint', 'A bit of both'].map((label) => {
                   const on = state.fuAns === label;
                   return (
-                    <button key={label} type="button" onClick={() => actions.answerFollowUp(label)} style={{ height: 34, padding: '0 14px', border: `1px solid ${on ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 999, background: on ? 'var(--violet-light)' : 'transparent', color: on ? 'var(--violet-deep)' : 'var(--text-2)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 500, fontSize: 13, cursor: 'pointer' }}>
+                    <button key={label} type="button" onClick={() => actions.answerFollowUp(label)} style={{ height: 34, padding: '0 14px', border: `1px solid ${on ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 999, background: on ? 'var(--violet-light)' : 'transparent', color: on ? 'var(--on-violet-light)' : 'var(--text-2)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 500, fontSize: 13, cursor: 'pointer' }}>
                       {label}
                     </button>
                   );

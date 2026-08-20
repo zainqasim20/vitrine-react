@@ -27,7 +27,7 @@ export function PipelineDebug() {
         gap: 6,
         fontFamily: "'Geist Mono', monospace",
         fontSize: 11.5,
-        color: 'var(--violet-deep)',
+        color: 'var(--on-violet-light)',
       }}
     >
       <span style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>

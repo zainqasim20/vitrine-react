@@ -50,7 +50,7 @@ export function Waiting() {
           {STEPS.map((label, i) => {
             const done = waitStep > i;
             const active = waitStep === i;
-            const fg = waitStep >= i ? 'var(--violet-deep)' : 'var(--text-3)';
+            const fg = waitStep >= i ? 'var(--on-violet-light)' : 'var(--text-3)';
             const icon = done ? 'ph-fill ph-check-circle' : active ? 'ph ph-circle-notch' : 'ph ph-circle-dashed';
             return (
               <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', border: '1px solid var(--border)', borderRadius: 12, background: 'var(--surface)' }}>

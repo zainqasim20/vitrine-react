@@ -9,7 +9,7 @@ const toneStyle: Record<Tone, CSSProperties> = {
   success: { background: 'var(--success-bg)', color: 'var(--success)' },
   neutral: { background: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' },
   sample: { background: 'rgba(255,255,255,0.92)', color: 'var(--text-2)', border: '1px solid var(--border)' },
-  'low-confidence': { background: 'var(--violet-light)', color: 'var(--violet-deep)' },
+  'low-confidence': { background: 'var(--violet-light)', color: 'var(--on-violet-light)' },
 };
 
 export function Tag({ tone = 'neutral', icon, children }: { tone?: Tone; icon?: string; children: ReactNode }) {

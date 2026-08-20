@@ -41,7 +41,7 @@ export function SettingsPage() {
                 border: 0,
                 borderRadius: 8,
                 background: state.settingsTab === t ? 'var(--violet-light)' : 'transparent',
-                color: state.settingsTab === t ? 'var(--violet-deep)' : 'var(--text-2)',
+                color: state.settingsTab === t ? 'var(--on-violet-light)' : 'var(--text-2)',
                 fontFamily: "'Plus Jakarta Sans', sans-serif",
                 fontWeight: state.settingsTab === t ? 700 : 500,
                 fontSize: 14,

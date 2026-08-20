@@ -453,10 +453,10 @@ export function Refine() {
               const on = sel === l.id;
               return (
                 <div key={l.id} onClick={() => actions.select(l.id)} style={{ display: 'flex', alignItems: 'center', gap: 8, height: 40, padding: `0 8px 0 ${l.indent}px`, borderRadius: 8, cursor: 'pointer', background: on ? 'var(--violet-light)' : 'transparent' }}>
-                  <i className={l.icon} style={{ fontSize: 16, color: on ? 'var(--violet-deep)' : 'var(--text-3)', flex: 'none' }} />
-                  <span style={{ flex: 1, fontSize: 13, fontWeight: l.indent > 8 ? 500 : 700, color: on ? 'var(--violet-deep)' : 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.name}</span>
+                  <i className={l.icon} style={{ fontSize: 16, color: on ? 'var(--on-violet-light)' : 'var(--text-3)', flex: 'none' }} />
+                  <span style={{ flex: 1, fontSize: 13, fontWeight: l.indent > 8 ? 500 : 700, color: on ? 'var(--on-violet-light)' : 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.name}</span>
                   {l.motion && (
-                    <span style={{ height: 20, padding: '0 8px', borderRadius: 999, background: 'var(--violet-light)', color: 'var(--violet-deep)', fontFamily: "'Geist Mono', monospace", fontSize: 11.5, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 4, flex: 'none' }}>
+                    <span style={{ height: 20, padding: '0 8px', borderRadius: 999, background: 'var(--violet-light)', color: 'var(--on-violet-light)', fontFamily: "'Geist Mono', monospace", fontSize: 11.5, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 4, flex: 'none' }}>
                       <i className="ph-fill ph-play-circle" style={{ fontSize: 12 }} />
                       Motion
                     </span>
@@ -504,7 +504,7 @@ export function Refine() {
                     {['Regular', 'Medium', 'Semibold'].map((w) => {
                       const on = state.weight === w;
                       return (
-                        <button key={w} type="button" onClick={() => actions.setWeight(w)} style={{ flex: 1, border: 0, background: on ? 'var(--violet-light)' : 'transparent', color: on ? 'var(--violet-deep)' : 'var(--text-2)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                        <button key={w} type="button" onClick={() => actions.setWeight(w)} style={{ flex: 1, border: 0, background: on ? 'var(--violet-light)' : 'transparent', color: on ? 'var(--on-violet-light)' : 'var(--text-2)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
                           {w}
                         </button>
                       );
@@ -546,7 +546,7 @@ export function Refine() {
                   ].map((e) => {
                     const on = state.emph === e.name;
                     return (
-                      <button key={e.name} type="button" onClick={() => actions.setEmph(e.name)} style={{ width: 40, height: 40, border: 0, borderRadius: 10, background: on ? 'var(--violet-light)' : '#FAFAFA', color: on ? 'var(--violet-deep)' : 'var(--text-2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                      <button key={e.name} type="button" onClick={() => actions.setEmph(e.name)} style={{ width: 40, height: 40, border: 0, borderRadius: 10, background: on ? 'var(--violet-light)' : '#FAFAFA', color: on ? 'var(--on-violet-light)' : 'var(--text-2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                         <i className={e.icon} style={{ fontSize: 18 }} />
                       </button>
                     );
@@ -566,7 +566,7 @@ export function Refine() {
                 ].map((a) => {
                   const on = state.align === a.name;
                   return (
-                    <button key={a.name} type="button" onClick={() => actions.setAlign(a.name)} style={{ flex: 1, height: 40, border: 0, borderRadius: 10, background: on ? 'var(--violet-light)' : '#FAFAFA', color: on ? 'var(--violet-deep)' : 'var(--text-2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                    <button key={a.name} type="button" onClick={() => actions.setAlign(a.name)} style={{ flex: 1, height: 40, border: 0, borderRadius: 10, background: on ? 'var(--violet-light)' : '#FAFAFA', color: on ? 'var(--on-violet-light)' : 'var(--text-2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                       <i className={a.icon} style={{ fontSize: 18 }} />
                     </button>
                   );
@@ -597,7 +597,7 @@ export function Refine() {
                   'Each upload becomes a numbered step with its own status.',
                   'A sequence, not a percentage bar.',
                 ].map((text, i) => (
-                  <button key={i} type="button" onClick={() => actions.pickRewrite(i)} style={{ padding: '10px 12px', border: `1.5px solid ${state.rwPick === i ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 10, background: state.rwPick === i ? 'var(--violet-light)' : 'transparent', color: state.rwPick === i ? 'var(--violet-deep)' : 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 13, lineHeight: 1.5, textAlign: 'left', cursor: 'pointer' }}>
+                  <button key={i} type="button" onClick={() => actions.pickRewrite(i)} style={{ padding: '10px 12px', border: `1.5px solid ${state.rwPick === i ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 10, background: state.rwPick === i ? 'var(--violet-light)' : 'transparent', color: state.rwPick === i ? 'var(--on-violet-light)' : 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 13, lineHeight: 1.5, textAlign: 'left', cursor: 'pointer' }}>
                     {text}
                   </button>
                 ))}
@@ -639,7 +639,7 @@ export function Refine() {
                   <span style={mono()}>W</span>
                   <input value={selSize.w} onChange={(e) => actions.setW(Number(e.target.value))} style={numInput()} />
                 </div>
-                <button type="button" onClick={() => actions.toggleLock()} style={{ width: 40, height: 40, border: 0, borderRadius: 10, background: state.lock ? 'var(--violet-light)' : '#FAFAFA', color: state.lock ? 'var(--violet-deep)' : 'var(--text-2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                <button type="button" onClick={() => actions.toggleLock()} style={{ width: 40, height: 40, border: 0, borderRadius: 10, background: state.lock ? 'var(--violet-light)' : '#FAFAFA', color: state.lock ? 'var(--on-violet-light)' : 'var(--text-2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                   <i className={state.lock ? 'ph-fill ph-lock-simple' : 'ph ph-lock-simple-open'} style={{ fontSize: 16 }} />
                 </button>
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -653,7 +653,7 @@ export function Refine() {
                   {['Free', '16:9', '4:3', '1:1'].map((label) => {
                     const on = state.ratio === label;
                     return (
-                      <button key={label} type="button" onClick={() => actions.setRatio(label)} style={{ height: 32, padding: '0 12px', border: `1.5px solid ${on ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 999, background: on ? 'var(--violet-light)' : 'transparent', color: on ? 'var(--violet-deep)' : 'var(--text-2)', fontFamily: "'Geist Mono', monospace", fontSize: 11.5, letterSpacing: '0.04em', cursor: 'pointer' }}>
+                      <button key={label} type="button" onClick={() => actions.setRatio(label)} style={{ height: 32, padding: '0 12px', border: `1.5px solid ${on ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 999, background: on ? 'var(--violet-light)' : 'transparent', color: on ? 'var(--on-violet-light)' : 'var(--text-2)', fontFamily: "'Geist Mono', monospace", fontSize: 11.5, letterSpacing: '0.04em', cursor: 'pointer' }}>
                         {label}
                       </button>
                     );
@@ -710,15 +710,14 @@ export function Refine() {
                         <span style={{ height: 72, borderRadius: 8, background: 'var(--surface-2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                           <span style={{ width: 26, height: 26, borderRadius: 8, background: stat ? '#F3F3F5' : 'var(--violet-gradient)', border: stat ? '1.5px solid var(--border)' : 0, animation: stat ? 'none' : `${m.keyframe} 2.2s ease-in-out infinite` }} />
                         </span>
-                        {/* Card background switches to the always-light
-                            --violet-light when `on` -- an unset/text-3 color
-                            inherits near-white in dark mode and goes
-                            low-contrast against it. */}
+                        {/* --violet-light adapts per theme (see tokens.css);
+                            --on-violet-light is its matching text/icon color
+                            in both themes. */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: on ? '#14141A' : 'var(--text)' }}>{m.name}</span>
-                          <i className={on ? 'ph-fill ph-check-circle' : 'ph ph-play'} style={{ fontSize: 16, color: on ? 'var(--violet-deep)' : 'var(--text-3)' }} />
+                          <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: on ? 'var(--on-violet-light)' : 'var(--text)' }}>{m.name}</span>
+                          <i className={on ? 'ph-fill ph-check-circle' : 'ph ph-play'} style={{ fontSize: 16, color: on ? 'var(--on-violet-light)' : 'var(--text-3)' }} />
                         </div>
-                        <span style={{ ...mono(), color: on ? '#55555F' : 'var(--text-3)' }}>{m.meta}</span>
+                        <span style={{ ...mono(), color: on ? 'var(--on-violet-light)' : 'var(--text-3)' }}>{m.meta}</span>
                       </div>
                     );
                   })}
@@ -775,16 +774,15 @@ export function Refine() {
                   const on = state.trigger === t.label;
                   return (
                     <button key={t.label} type="button" onClick={() => actions.setTrigger(t.label)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 14, border: `1.5px solid ${on ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 10, background: on ? 'var(--violet-light)' : 'transparent', cursor: 'pointer', textAlign: 'left' }}>
-                      <i className={t.icon} style={{ fontSize: 20, color: on ? 'var(--violet-deep)' : 'var(--text-3)' }} />
-                      {/* This card's background switches to the always-light
-                          --violet-light when `on` -- var(--text)/text-3 turn
-                          near-white in dark mode and go low-contrast against
-                          it, same bug class as the Landing hero dropzone. */}
+                      <i className={t.icon} style={{ fontSize: 20, color: on ? 'var(--on-violet-light)' : 'var(--text-3)' }} />
+                      {/* --violet-light adapts per theme (see tokens.css);
+                          --on-violet-light is its matching text/icon color
+                          in both themes. */}
                       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <span style={{ fontSize: 15, fontWeight: 700, color: on ? '#14141A' : 'var(--text)' }}>{t.label}</span>
-                        <span style={{ ...mono(), color: on ? '#55555F' : 'var(--text-3)' }}>{t.meta}</span>
+                        <span style={{ fontSize: 15, fontWeight: 700, color: on ? 'var(--on-violet-light)' : 'var(--text)' }}>{t.label}</span>
+                        <span style={{ ...mono(), color: on ? 'var(--on-violet-light)' : 'var(--text-3)' }}>{t.meta}</span>
                       </div>
-                      <i className={on ? 'ph-fill ph-check-circle' : 'ph ph-circle'} style={{ fontSize: 18, color: on ? 'var(--violet-deep)' : 'var(--text-3)' }} />
+                      <i className={on ? 'ph-fill ph-check-circle' : 'ph ph-circle'} style={{ fontSize: 18, color: on ? 'var(--on-violet-light)' : 'var(--text-3)' }} />
                     </button>
                   );
                 })}
@@ -834,7 +832,7 @@ export function Refine() {
             {LAYOUT_OPTS.map((o) => {
               const on = state.prevLay === o.key;
               return (
-                <button key={o.key} type="button" title={o.title} onClick={() => actions.setPrevLay(o.key)} style={{ width: 34, height: 34, border: 0, borderRadius: 999, background: on ? 'var(--surface)' : 'transparent', color: on ? 'var(--violet-deep)' : 'var(--text-3)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                <button key={o.key} type="button" title={o.title} onClick={() => actions.setPrevLay(o.key)} style={{ width: 34, height: 34, border: 0, borderRadius: 999, background: on ? 'var(--surface)' : 'transparent', color: on ? 'var(--on-violet-light)' : 'var(--text-3)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                   <i className={o.icon} style={{ fontSize: 17 }} />
                 </button>
               );
@@ -1238,7 +1236,7 @@ function TabBar({ tabs, active, onPick }: { tabs: string[]; active: string; onPi
             key={t}
             type="button"
             onClick={() => onPick(t)}
-            style={{ flex: 1, padding: '15px 4px', border: 0, background: 'transparent', textAlign: 'center', fontFamily: "'Geist Mono', monospace", fontSize: 11.5, fontWeight: 500, letterSpacing: '0.02em', textTransform: 'uppercase', whiteSpace: 'nowrap', color: on ? 'var(--violet-deep)' : 'var(--text-3)', borderBottom: `1.5px solid ${on ? 'var(--violet)' : 'transparent'}`, marginBottom: -1, cursor: 'pointer' }}
+            style={{ flex: 1, padding: '15px 4px', border: 0, background: 'transparent', textAlign: 'center', fontFamily: "'Geist Mono', monospace", fontSize: 11.5, fontWeight: 500, letterSpacing: '0.02em', textTransform: 'uppercase', whiteSpace: 'nowrap', color: on ? 'var(--on-violet-light)' : 'var(--text-3)', borderBottom: `1.5px solid ${on ? 'var(--violet)' : 'transparent'}`, marginBottom: -1, cursor: 'pointer' }}
           >
             {t}
           </button>
@@ -1286,7 +1284,7 @@ function ToolButton({ icon, label, active, emph, onClick }: { icon: string; labe
         border: 0,
         borderRadius: 999,
         background: active ? 'var(--violet-light)' : 'transparent',
-        color: active ? 'var(--violet-deep)' : 'var(--text-2)',
+        color: active ? 'var(--on-violet-light)' : 'var(--text-2)',
         fontFamily: "'Plus Jakarta Sans', sans-serif",
         fontWeight: 700,
         fontSize: 13,

@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useApp } from '../lib/store';
+import { ThemeSwitch } from './ThemeSwitch';
 
 const CRUMBS: Record<string, string> = {
   '/projects': 'Workspace / My Projects',
@@ -22,7 +23,7 @@ const navBtnStyle = (active: boolean): CSSProperties => ({
   borderRadius: 10,
   width: '100%',
   background: active ? 'var(--violet-light)' : 'transparent',
-  color: active ? 'var(--violet-deep)' : 'var(--text-2)',
+  color: active ? 'var(--on-violet-light)' : 'var(--text-2)',
   fontFamily: "'Plus Jakarta Sans', sans-serif",
   fontWeight: active ? 700 : 500,
   fontSize: 14,
@@ -173,6 +174,7 @@ export function DashLayout() {
         >
           <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 12, letterSpacing: '0.03em', color: 'var(--text-3)' }}>{crumb}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <ThemeSwitch />
             <button
               type="button"
               onClick={() => actions.goHelp()}
@@ -191,7 +193,7 @@ export function DashLayout() {
                 border: '1px solid var(--border)',
                 borderRadius: 999,
                 background: 'var(--violet-light)',
-                color: 'var(--violet-deep)',
+                color: 'var(--on-violet-light)',
                 fontFamily: "'Plus Jakarta Sans', sans-serif",
                 fontWeight: 700,
                 fontSize: 12,

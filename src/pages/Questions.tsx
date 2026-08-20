@@ -145,11 +145,9 @@ export function Questions() {
                         <span key={i} style={{ height: 5, borderRadius: 2, background: i === 0 ? 'var(--text)' : 'var(--border)', width: `${w}%` }} />
                       ))}
                     </span>
-                    {/* Card background switches to the always-light
-                        --violet-light when `on` -- inherited var(--text)
-                        turns near-white in dark mode and goes low-contrast
-                        against it. */}
-                    <span style={{ fontSize: 13, fontWeight: 700, color: on ? '#14141A' : 'var(--text)' }}>{o.label}</span>
+                    {/* --violet-light adapts per theme (see tokens.css);
+                        --on-violet-light is its matching text color. */}
+                    <span style={{ fontSize: 13, fontWeight: 700, color: on ? 'var(--on-violet-light)' : 'var(--text)' }}>{o.label}</span>
                   </button>
                 );
               })}
@@ -200,7 +198,7 @@ function chip(on: boolean) {
     border: `1.5px solid ${on ? 'var(--violet)' : 'var(--border)'}`,
     borderRadius: 999,
     background: on ? 'var(--violet-light)' : 'transparent',
-    color: on ? 'var(--violet-deep)' : 'var(--text-2)',
+    color: on ? 'var(--on-violet-light)' : 'var(--text-2)',
     fontFamily: "'Plus Jakarta Sans', sans-serif",
     fontWeight: 500,
     fontSize: 14,

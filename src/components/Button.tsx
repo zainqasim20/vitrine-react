@@ -78,7 +78,7 @@ export function IconButton({
         border: active ? '1.5px solid var(--violet)' : '1px solid var(--border)',
         borderRadius: 10,
         background: active ? 'var(--violet-light)' : 'transparent',
-        color: active ? 'var(--violet-deep)' : 'var(--text-2)',
+        color: active ? 'var(--on-violet-light)' : 'var(--text-2)',
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',

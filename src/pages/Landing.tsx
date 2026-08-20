@@ -184,8 +184,8 @@ export function Landing() {
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                        <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 11.5, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', color: on ? 'var(--violet-deep)' : 'var(--text-3)' }}>{f.label}</span>
-                        <i className={f.icon} style={{ fontSize: 16, color: on ? 'var(--violet-deep)' : 'var(--text-3)' }} />
+                        <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 11.5, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', color: on ? 'var(--on-violet-light)' : 'var(--text-3)' }}>{f.label}</span>
+                        <i className={f.icon} style={{ fontSize: 16, color: on ? 'var(--on-violet-light)' : 'var(--text-3)' }} />
                       </div>
                       <LandingFrameMock stepKey={f.key} />
                     </div>
@@ -217,15 +217,11 @@ export function Landing() {
               <span style={{ width: 52, height: 52, borderRadius: 14, background: 'var(--violet-gradient)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'center' }}>
                 <i className="ph ph-cloud-arrow-up" style={{ fontSize: 26, color: '#FFFFFF' }} />
               </span>
-              {/* This card's background is deliberately fixed light lavender
-                  in both themes (--violet-light has no dark override), so
-                  its text needs fixed dark ink too -- the theme-swapping
-                  --text/--text-2 tokens turn near-white in dark mode and go
-                  invisible against this light card. Real bug, not
-                  cosmetic: confirmed via a dark-mode screenshot. */}
+              {/* --violet-light adapts per theme (see tokens.css);
+                  --on-violet-light is its matching text color in both. */}
               <span style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 17, color: '#14141A' }}>Drop your screens here to start</span>
-                <span style={{ fontSize: 14, lineHeight: 1.5, color: '#55555F', textAlign: 'center' }}>PNG, JPG or MP4 · a draft in about a minute · no account needed</span>
+                <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 17, color: 'var(--on-violet-light)' }}>Drop your screens here to start</span>
+                <span style={{ fontSize: 14, lineHeight: 1.5, color: 'var(--on-violet-light)', textAlign: 'center', opacity: 0.85 }}>PNG, JPG or MP4 · a draft in about a minute · no account needed</span>
               </span>
             </button>
           </div>
@@ -241,7 +237,7 @@ export function Landing() {
               {HOW_STEPS.map((h, i) => (
                 <div key={h.num} style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingRight: 40, borderRight: i < 2 ? '1px solid var(--border)' : 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <span style={{ height: 32, padding: '0 12px', borderRadius: 999, background: 'var(--violet-light)', color: 'var(--violet-deep)', fontFamily: "'Geist Mono', monospace", fontSize: 11.5, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center' }}>
+                    <span style={{ height: 32, padding: '0 12px', borderRadius: 999, background: 'var(--violet-light)', color: 'var(--on-violet-light)', fontFamily: "'Geist Mono', monospace", fontSize: 11.5, fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center' }}>
                       {h.num}
                     </span>
                     <span style={{ flex: 1, height: 1, background: 'var(--border)' }} />

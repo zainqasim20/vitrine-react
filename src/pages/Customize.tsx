@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../lib/store';
 import { Logo } from '../components/Logo';
+import { ThemeSwitch } from '../components/ThemeSwitch';
 import { FreeformCanvas } from '../components/customize/FreeformCanvas';
 import type { FreeformElement, FreeformElementType, FreeformGradient, FreeformPage, FreeformShapeKind } from '../lib/templates/freeform-types';
 import { buildFreeformGradientCss, FREEFORM_SCENERY_PRESETS, FREEFORM_VIBRANT_PRESETS, parseFreeformGradient } from '../lib/templates/freeform-types';
@@ -47,7 +48,7 @@ function IconBtn({ icon, title, onClick, danger, disabled }: { icon: string; tit
 }
 
 function tabBtnStyle(active: boolean): React.CSSProperties {
-  return { flex: 1, height: 28, border: `1px solid ${active ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 8, background: active ? 'var(--violet-light)' : 'transparent', color: active ? 'var(--violet-deep)' : 'var(--text-2)', fontSize: 11.5, fontWeight: 700, textTransform: 'capitalize', cursor: 'pointer' };
+  return { flex: 1, height: 28, border: `1px solid ${active ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 8, background: active ? 'var(--violet-light)' : 'transparent', color: active ? 'var(--on-violet-light)' : 'var(--text-2)', fontSize: 11.5, fontWeight: 700, textTransform: 'capitalize', cursor: 'pointer' };
 }
 
 function isGradientCss(v: string): boolean {
@@ -563,7 +564,7 @@ function FontPicker({ value, onChange }: { value: string; onChange: (family: str
                     key={c}
                     type="button"
                     onClick={() => setCat(c)}
-                    style={{ height: 24, padding: '0 8px', borderRadius: 999, border: `1px solid ${cat === c ? 'var(--violet)' : 'var(--border)'}`, background: cat === c ? 'var(--violet-light)' : 'transparent', color: cat === c ? 'var(--violet-deep)' : 'var(--text-3)', fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}
+                    style={{ height: 24, padding: '0 8px', borderRadius: 999, border: `1px solid ${cat === c ? 'var(--violet)' : 'var(--border)'}`, background: cat === c ? 'var(--violet-light)' : 'transparent', color: cat === c ? 'var(--on-violet-light)' : 'var(--text-3)', fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}
                   >
                     {c === 'all' ? 'All' : FONT_CATEGORY_LABELS[c]}
                   </button>
@@ -1217,6 +1218,8 @@ export function Customize() {
               </>
             )}
           </div>
+          <span style={{ width: 1, height: 20, background: 'var(--border)' }} />
+          <ThemeSwitch size={30} />
         </div>
       </header>
 
@@ -1279,7 +1282,7 @@ export function Customize() {
                         e.stopPropagation();
                         setRenamingPageId(p.id);
                       }}
-                      style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: active ? 700 : 500, color: active ? 'var(--violet-deep)' : 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                      style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: active ? 700 : 500, color: active ? 'var(--on-violet-light)' : 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
                     >
                       {p.name}
                     </span>
@@ -1304,15 +1307,17 @@ export function Customize() {
         </aside>
 
         <main ref={mainRef} style={{ flex: 1, overflow: 'auto', background: 'var(--surface-3)', padding: '32px 32px 96px' }}>
-          {/* alignItems: flex-start, not center -- the canvas is a fixed
-              1200px and the two sidebars can leave less room than that at
-              common viewport widths. Centering an overflowing flex item
-              clips it symmetrically with no way to scroll back to the
-              hidden left edge; left-aligning keeps x=0 (where most of a
-              page's important content sits, e.g. Cover's PRODUCTS label)
-              always reachable at scrollLeft 0, with the rest a normal
-              rightward scroll away. */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 28 }}>
+          {/* "safe center" -- the canvas is a fixed 1200px and the two
+              resizable side panels can leave less room than that at common
+              widths. Plain `center` would clip an overflowing page
+              symmetrically with no way to scroll back to the hidden left
+              edge; `safe center` centers when there's room and falls back
+              to start-aligned (x=0 reachable at scrollLeft 0) the moment
+              the page doesn't fit, exactly like the old flex-start did --
+              and because this is plain flex layout, it re-centers live as
+              leftWidth/rightWidth change while dragging the panel edges,
+              with no extra resize listener needed. */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'safe center', gap: 28 }}>
             {pages.map((p, i) => (
               <div
                 key={p.id}
@@ -1371,7 +1376,7 @@ export function Customize() {
                       className={`vt-list-row${active ? ' is-active' : ''}`}
                       style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 7, cursor: 'pointer', background: active ? 'var(--violet-light)' : 'transparent' }}
                     >
-                      <i className={icon} style={{ fontSize: 13, color: active ? 'var(--violet-deep)' : 'var(--text-3)', flex: 'none' }} />
+                      <i className={icon} style={{ fontSize: 13, color: active ? 'var(--on-violet-light)' : 'var(--text-3)', flex: 'none' }} />
                       {renamingLayerId === el.id ? (
                         <input
                           autoFocus
@@ -1390,7 +1395,7 @@ export function Customize() {
                             e.stopPropagation();
                             setRenamingLayerId(el.id);
                           }}
-                          style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: active ? 700 : 500, color: active ? 'var(--violet-deep)' : 'var(--text-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                          style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: active ? 700 : 500, color: active ? 'var(--on-violet-light)' : 'var(--text-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
                         >
                           {label}
                         </span>
@@ -1492,7 +1497,7 @@ export function Customize() {
                           key={w}
                           type="button"
                           onClick={() => patchSelected({ fontWeight: w })}
-                          style={{ flex: 1, height: 32, border: `1.5px solid ${selected.fontWeight === w ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 8, background: selected.fontWeight === w ? 'var(--violet-light)' : 'transparent', color: selected.fontWeight === w ? 'var(--violet-deep)' : 'var(--text-2)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                          style={{ flex: 1, height: 32, border: `1.5px solid ${selected.fontWeight === w ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 8, background: selected.fontWeight === w ? 'var(--violet-light)' : 'transparent', color: selected.fontWeight === w ? 'var(--on-violet-light)' : 'var(--text-2)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
                         >
                           {w}
                         </button>
@@ -1507,7 +1512,7 @@ export function Customize() {
                           key={a}
                           type="button"
                           onClick={() => patchSelected({ align: a })}
-                          style={{ flex: 1, height: 32, border: `1.5px solid ${selected.align === a ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 8, background: selected.align === a ? 'var(--violet-light)' : 'transparent', color: selected.align === a ? 'var(--violet-deep)' : 'var(--text-2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                          style={{ flex: 1, height: 32, border: `1.5px solid ${selected.align === a ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 8, background: selected.align === a ? 'var(--violet-light)' : 'transparent', color: selected.align === a ? 'var(--on-violet-light)' : 'var(--text-2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
                         >
                           <i className={`ph ph-text-align-${a}`} style={{ fontSize: 15 }} />
                         </button>
@@ -1598,7 +1603,7 @@ export function Customize() {
                             Remove
                           </button>
                         ) : (
-                          <button type="button" onClick={() => patchSelected({ stroke: '#14141A', strokeWidth: 2 })} style={{ height: 20, padding: '0 8px', border: '1px solid var(--violet)', borderRadius: 999, background: 'var(--violet-light)', color: 'var(--violet-deep)', fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}>
+                          <button type="button" onClick={() => patchSelected({ stroke: '#14141A', strokeWidth: 2 })} style={{ height: 20, padding: '0 8px', border: '1px solid var(--violet)', borderRadius: 999, background: 'var(--violet-light)', color: 'var(--on-violet-light)', fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}>
                             Add
                           </button>
                         )}
@@ -1665,7 +1670,7 @@ export function Customize() {
                       if (!aspectLocked) aspectRatioRef.current = selected.w / selected.h || 1;
                       setAspectLocked((v) => !v);
                     }}
-                    style={{ width: 32, height: 32, flex: 'none', border: `1px solid ${aspectLocked ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 8, background: aspectLocked ? 'var(--violet-light)' : 'transparent', color: aspectLocked ? 'var(--violet-deep)' : 'var(--text-3)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                    style={{ width: 32, height: 32, flex: 'none', border: `1px solid ${aspectLocked ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 8, background: aspectLocked ? 'var(--violet-light)' : 'transparent', color: aspectLocked ? 'var(--on-violet-light)' : 'var(--text-3)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
                   >
                     <i className={aspectLocked ? 'ph-fill ph-link-simple' : 'ph ph-link-simple-break'} style={{ fontSize: 14 }} />
                   </button>

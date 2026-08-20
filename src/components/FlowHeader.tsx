@@ -166,7 +166,7 @@ export function FlowHeader() {
             border: '1px solid var(--border)',
             borderRadius: 999,
             background: 'var(--violet-light)',
-            color: 'var(--violet-deep)',
+            color: 'var(--on-violet-light)',
             fontFamily: "'Plus Jakarta Sans', sans-serif",
             fontWeight: 700,
             fontSize: 12,

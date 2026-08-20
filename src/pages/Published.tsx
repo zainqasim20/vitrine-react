@@ -56,7 +56,7 @@ export function Published() {
                 onClick={() => e.go()}
                 style={{ padding: 16, border: '1.5px solid var(--border)', borderRadius: 12, background: 'transparent', cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 8 }}
               >
-                <i className={e.icon} style={{ fontSize: 22, color: 'var(--violet-deep)' }} />
+                <i className={e.icon} style={{ fontSize: 22, color: 'var(--on-violet-light)' }} />
                 <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>{e.label}</span>
                 <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 11.5, letterSpacing: '0.04em', color: 'var(--text-3)' }}>{e.meta}</span>
               </button>

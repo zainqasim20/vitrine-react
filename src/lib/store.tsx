@@ -543,6 +543,7 @@ export interface AppActions {
   removeFreeformElements: (pageId: string, elementIds: string[]) => void;
   addFreeformElement: (pageId: string, type: FreeformElementType, shapeKind?: FreeformShapeKind) => void;
   addFreeformMockup: (pageId: string, kind: 'phone' | 'laptop' | 'browser' | 'tablet', tilted: boolean) => void;
+  addFreeformPhotoMockup: (pageId: string, photoSrc: string, photoWidth: number, photoHeight: number, label: string) => void;
   duplicateFreeformElement: (pageId: string, elementId: string) => void;
   duplicateFreeformElements: (pageId: string, elementIds: string[]) => void;
   alignFreeformElements: (pageId: string, elementIds: string[], mode: 'left' | 'centerH' | 'right' | 'top' | 'centerV' | 'bottom') => void;
@@ -1971,6 +1972,64 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [patch],
   );
 
+  // A "realistic" mockup built from a real, searched photo (see
+  // handleAddPhotoMockup in Customize.tsx, which does the actual Pexels/
+  // Unsplash search and passes the picked result in here) instead of the
+  // CSS-rendered chrome addFreeformMockup draws. There's no way to detect
+  // where a device's screen actually sits in an arbitrary real photo, so
+  // the overlay rect below is a reasonable generic guess (centered,
+  // slightly upper-weighted, sized to a fraction of the photo) -- a
+  // starting point the user nudges/resizes to match that specific photo,
+  // not a calibrated fit. Disclosed in the layer name itself.
+  const addFreeformPhotoMockup = useCallback(
+    (pageId: string, photoSrc: string, photoWidth: number, photoHeight: number, label: string) => {
+      snapshotFreeformHistory();
+      patch((s) => {
+        const page = s.freeform?.pages.find((p) => p.id === pageId);
+        if (!page) return {};
+        let z = freeformMaxZ(page.elements);
+        const cx = FREEFORM_CANVAS_WIDTH / 2;
+        const cy = page.height / 2;
+        const groupId = freeformId('group');
+
+        const maxDim = 520;
+        const scale = Math.min(maxDim / (photoWidth || maxDim), maxDim / (photoHeight || maxDim), 1);
+        const w = Math.round((photoWidth || maxDim) * scale);
+        const h = Math.round((photoHeight || maxDim) * scale);
+        const x = cx - w / 2;
+        const y = cy - h / 2;
+
+        z += 1;
+        const backgroundEl: FreeformElement = { id: freeformId('image'), type: 'image', x, y, w, h, zIndex: z, src: photoSrc, objectFit: 'cover', borderRadius: 12, groupId, name: `${label} mockup photo` };
+
+        const screenW = Math.round(w * 0.62);
+        const screenH = Math.round(h * 0.5);
+        z += 1;
+        const screenEl: FreeformElement = {
+          id: freeformId('image'),
+          type: 'image',
+          x: Math.round(x + (w - screenW) / 2),
+          y: Math.round(y + h * 0.14),
+          w: screenW,
+          h: screenH,
+          zIndex: z,
+          src: FREEFORM_PLACEHOLDER_IMAGE,
+          objectFit: 'cover',
+          borderRadius: 6,
+          locked: true,
+          groupId,
+          name: 'Mockup screen (drag/resize to align with the photo)',
+        };
+
+        return {
+          freeform: mapFreeformPage(s.freeform, pageId, (p) => ({ ...p, elements: [...p.elements, backgroundEl, screenEl] })),
+          freeformSelectedIds: [backgroundEl.id, screenEl.id],
+        };
+      });
+    },
+    [patch],
+  );
+
   const duplicateFreeformElement = useCallback(
     (pageId: string, elementId: string) => {
       snapshotFreeformHistory();
@@ -2738,6 +2797,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     removeFreeformElements,
     addFreeformElement,
     addFreeformMockup,
+    addFreeformPhotoMockup,
     duplicateFreeformElement,
     duplicateFreeformElements,
     alignFreeformElements,

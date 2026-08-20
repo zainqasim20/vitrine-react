@@ -285,6 +285,11 @@ export const FREEFORM_VIBRANT_PRESETS: { name: string; css: string }[] = [
   { name: 'Deep Violet', css: 'radial-gradient(circle, #AD5BFC 0%, #6038EE 40%, #2B8FF5 70%, #0D0D14 100%)' },
   { name: 'Coral Reef', css: 'linear-gradient(135deg, #FF8B94 0%, #FFC6C7 35%, #A0E7E5 70%, #FFF5F5 100%)' },
   { name: 'Midnight Teal', css: 'radial-gradient(circle, #1FA971 0%, #0EA5A5 35%, #14141A 70%, #071B1A 100%)' },
+  { name: 'Neon Cyber', css: 'radial-gradient(circle, #FF00E5 0%, #00E5FF 40%, #7000FF 75%, #0A0014 100%)' },
+  { name: 'Holographic', css: 'linear-gradient(120deg, #FFD1FF 0%, #B5FFFC 35%, #C9C2FF 65%, #FFE5B4 100%)' },
+  { name: 'Duotone Blaze', css: 'linear-gradient(135deg, #FF4D00 0%, #FF0080 55%, #7A00FF 100%)' },
+  { name: 'Glacier', css: 'radial-gradient(circle, #E8FBFF 0%, #9FE7F5 40%, #4A90E2 75%, #1B2A4A 100%)' },
+  { name: 'Ember Noir', css: 'radial-gradient(circle, #FF6B35 0%, #C1121F 35%, #370617 70%, #0A0000 100%)' },
 ];
 
 // Stylized nature-toned gradients ("sceneries") built the same way -- one

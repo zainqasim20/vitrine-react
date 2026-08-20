@@ -258,6 +258,15 @@ function MediaFillPicker({ value, onChange }: { value: string | null; onChange: 
   );
 }
 
+const MOOD_QUERIES: { label: string; query: string }[] = [
+  { label: 'Ocean', query: 'ocean sunset horizon' },
+  { label: 'Forest', query: 'forest canopy misty' },
+  { label: 'Urban night', query: 'city skyline night' },
+  { label: 'Mountains', query: 'mountains golden hour' },
+  { label: 'Desert', query: 'desert dunes' },
+  { label: 'Florals', query: 'flowers macro pastel' },
+];
+
 // Real Pexels search, not a stand-in -- hits the exact same /api/pexels-search
 // route the Templates gallery already uses (see fetchStockPhoto in store.tsx),
 // just with more results per query (perPage=20 vs that path's perPage=1) and
@@ -291,8 +300,8 @@ function StockPhotoSearch({ onPick }: { onPick: (css: string) => void }) {
     });
   }, [state.apiStatus.checked, state.apiStatus.pexels, state.apiStatus.unsplash]);
 
-  function runSearch() {
-    const q = query.trim();
+  function runSearch(queryOverride?: string) {
+    const q = (queryOverride ?? query).trim();
     if (!q || status === 'loading') return;
     setStatus('loading');
     setErrorMsg('');
@@ -364,12 +373,30 @@ function StockPhotoSearch({ onPick }: { onPick: (css: string) => void }) {
         />
         <button
           type="button"
-          onClick={runSearch}
+          onClick={() => runSearch()}
           disabled={status === 'loading' || !query.trim()}
           style={{ height: 32, padding: '0 12px', border: '1px solid var(--border)', borderRadius: 8, background: 'transparent', color: 'var(--text)', fontSize: 12, fontWeight: 700, cursor: status === 'loading' ? 'default' : 'pointer' }}
         >
           {status === 'loading' ? '…' : 'Search'}
         </button>
+      </div>
+      {/* One-click starting points for portfolio backgrounds -- a real
+          photo alternative sitting right next to the stylized gradient
+          Scenery presets in the Gradient tab, for the same moods. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        {MOOD_QUERIES.map((m) => (
+          <button
+            key={m.label}
+            type="button"
+            onClick={() => {
+              setQuery(m.query);
+              runSearch(m.query);
+            }}
+            style={{ height: 22, padding: '0 8px', borderRadius: 999, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-3)', fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}
+          >
+            {m.label}
+          </button>
+        ))}
       </div>
       {status === 'error' && <p style={{ margin: 0, fontSize: 11.5, color: 'var(--error)' }}>{errorMsg}</p>}
       {results.length > 0 && (
@@ -767,6 +794,7 @@ export function Customize() {
   const [exportBusy, setExportBusy] = useState<string | null>(null);
   const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
   const [mockupMenuOpen, setMockupMenuOpen] = useState(false);
+  const [photoMockupLoading, setPhotoMockupLoading] = useState<'phone' | 'tablet' | 'laptop' | null>(null);
   const [aspectLocked, setAspectLocked] = useState(false);
   const [leftWidth, setLeftWidth] = useState(220);
   const [rightWidth, setRightWidth] = useState(280);
@@ -937,6 +965,49 @@ export function Customize() {
     }
   }
 
+  // The "realistic" mockup entries: searches Pexels (falling back to
+  // Unsplash if Pexels has no results) for a real, front-facing device
+  // photo and drops it in via addFreeformPhotoMockup. The queries below
+  // are chosen to surface photos genuinely shot for compositing (mostly
+  // front-on, blank/plain screen) rather than arbitrary lifestyle shots --
+  // still real search results, not curated/guaranteed, so quality varies
+  // by what's actually indexed for that query today.
+  const PHOTO_MOCKUP_QUERIES: Record<'phone' | 'tablet' | 'laptop', string> = {
+    phone: 'iphone mockup blank screen',
+    tablet: 'ipad tablet mockup blank screen',
+    laptop: 'macbook laptop mockup blank screen desk',
+  };
+  const PHOTO_MOCKUP_LABELS: Record<'phone' | 'tablet' | 'laptop', string> = { phone: 'Phone', tablet: 'Tablet', laptop: 'Laptop' };
+
+  async function handleAddPhotoMockup(kind: 'phone' | 'tablet' | 'laptop') {
+    if (!state.apiStatus.pexels && !state.apiStatus.unsplash) return;
+    setMockupMenuOpen(false);
+    setPhotoMockupLoading(kind);
+    const sources: ('pexels' | 'unsplash')[] = state.apiStatus.pexels ? ['pexels', 'unsplash'] : ['unsplash'];
+    try {
+      let photo: PexelsPhoto | null = null;
+      for (const src of sources) {
+        if (src === 'unsplash' && !state.apiStatus.unsplash) continue;
+        const endpoint = src === 'pexels' ? '/api/pexels-search' : '/api/unsplash-search';
+        const r = await fetch(`${endpoint}?query=${encodeURIComponent(PHOTO_MOCKUP_QUERIES[kind])}&perPage=1`);
+        const data: { photos?: PexelsPhoto[] } = await r.json();
+        if (data.photos && data.photos.length) {
+          photo = data.photos[0];
+          break;
+        }
+      }
+      if (!photo) {
+        actions.say('No real photo found for that mockup right now — try again, or use the drawn version above.');
+        return;
+      }
+      actions.addFreeformPhotoMockup(activePage.id, photo.src, photo.width, photo.height, PHOTO_MOCKUP_LABELS[kind]);
+    } catch {
+      actions.say('Photo search failed — try again.');
+    } finally {
+      setPhotoMockupLoading(null);
+    }
+  }
+
   return (
     <div
       onClick={(e) => {
@@ -1102,6 +1173,39 @@ export function Customize() {
                     </div>
                   ))}
                   <p style={{ margin: '4px 8px 2px', fontSize: 10.5, lineHeight: 1.5, color: 'var(--text-3)' }}>The rotate icon adds a tilted variant. Frame + screen insert together — the screen is locked/crop-ready, ready to replace.</p>
+                  <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
+                  <span style={{ ...mono(), padding: '0 8px' }}>Realistic (real photo)</span>
+                  {(['phone', 'tablet', 'laptop'] as const).map((kind) => (
+                    <button
+                      key={kind}
+                      type="button"
+                      disabled={!!photoMockupLoading || (!state.apiStatus.pexels && !state.apiStatus.unsplash)}
+                      onClick={() => handleAddPhotoMockup(kind)}
+                      style={{
+                        height: 34,
+                        border: 0,
+                        borderRadius: 8,
+                        background: 'transparent',
+                        color: !state.apiStatus.pexels && !state.apiStatus.unsplash ? 'var(--text-3)' : 'var(--text)',
+                        fontFamily: "'Plus Jakarta Sans', sans-serif",
+                        fontWeight: 600,
+                        fontSize: 12.5,
+                        cursor: photoMockupLoading || (!state.apiStatus.pexels && !state.apiStatus.unsplash) ? 'default' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '0 8px',
+                      }}
+                    >
+                      <i className={photoMockupLoading === kind ? 'ph ph-circle-notch' : 'ph ph-image-square'} style={{ fontSize: 15, color: 'var(--text-2)' }} />
+                      {photoMockupLoading === kind ? `Searching for ${PHOTO_MOCKUP_LABELS[kind].toLowerCase()} photo…` : `${PHOTO_MOCKUP_LABELS[kind]} — real photo`}
+                    </button>
+                  ))}
+                  {!state.apiStatus.pexels && !state.apiStatus.unsplash ? (
+                    <p style={{ margin: '4px 8px 2px', fontSize: 10.5, lineHeight: 1.5, color: 'var(--text-3)' }}>Needs a Pexels or Unsplash key (see the Media fill tab) — same source used for photo search everywhere in this editor.</p>
+                  ) : (
+                    <p style={{ margin: '4px 8px 2px', fontSize: 10.5, lineHeight: 1.5, color: 'var(--text-3)' }}>Drops in a real, searched device photo + a screen overlay for your own screenshot. There's no way to detect exactly where the screen sits in an arbitrary photo, so nudge/resize the overlay to line up with that specific photo.</p>
+                  )}
                 </div>
               </>
             )}

@@ -38,6 +38,7 @@ function IconBtn({ icon, title, onClick, danger, disabled }: { icon: string; tit
       title={title}
       onClick={onClick}
       disabled={disabled}
+      className="vt-icon-btn"
       style={{ width: 26, height: 26, border: 0, borderRadius: 7, background: 'transparent', color: disabled ? 'var(--border-strong)' : danger ? 'var(--error)' : 'var(--text-3)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: disabled ? 'default' : 'pointer' }}
     >
       <i className={icon} style={{ fontSize: 14 }} />
@@ -880,7 +881,8 @@ export function Customize() {
           <button
             type="button"
             onClick={() => navigate('/templates')}
-            style={{ marginTop: 12, height: 48, padding: '0 24px', border: 0, borderRadius: 10, background: 'var(--violet-gradient)', color: '#FFFFFF', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 15, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}
+            className="vt-primary-btn"
+            style={{ marginTop: 12, height: 48, padding: '0 24px', border: 0, borderRadius: 10, background: 'var(--violet-gradient)', color: '#FFFFFF', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 15, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 14px rgba(122,71,245,0.22)' }}
           >
             Browse templates
           </button>
@@ -1022,7 +1024,7 @@ export function Customize() {
       }}
       style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--text)' }}
     >
-      <header style={{ flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '12px 20px', borderBottom: '1px solid var(--border)' }}>
+      <header style={{ flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '12px 20px', borderBottom: '1px solid var(--border)', background: 'var(--surface)', boxShadow: '0 1px 12px rgba(0,0,0,0.05)', zIndex: 10, position: 'relative' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <Logo height={22} />
           <Link to="/templates" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-2)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 13, textDecoration: 'none' }}>
@@ -1048,6 +1050,7 @@ export function Customize() {
             <button
               type="button"
               onClick={() => setFileMenuOpen((v) => !v)}
+              className="vt-toolbar-btn"
               style={{ height: 30, padding: '0 12px', border: '1px solid var(--border)', borderRadius: 8, background: 'transparent', color: 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 12.5, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
             >
               File
@@ -1079,6 +1082,7 @@ export function Customize() {
             type="button"
             onClick={() => navigate('/preview')}
             title="See the read-only final look"
+            className="vt-toolbar-btn"
             style={{ height: 34, padding: '0 12px', border: '1px solid var(--border)', borderRadius: 8, background: 'transparent', color: 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 12.5, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
           >
             <i className="ph ph-eye" style={{ fontSize: 14 }} />
@@ -1091,6 +1095,7 @@ export function Customize() {
               type="button"
               onClick={() => actions.addFreeformElement(activePage.id, t.type)}
               title={`Add ${t.label.toLowerCase()} to "${activePage.name}"`}
+              className="vt-toolbar-btn"
               style={{ height: 34, padding: '0 12px', border: '1px solid var(--border)', borderRadius: 8, background: 'transparent', color: 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 12.5, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
             >
               <i className={t.icon} style={{ fontSize: 14 }} />
@@ -1102,6 +1107,7 @@ export function Customize() {
               type="button"
               onClick={() => setShapeMenuOpen((v) => !v)}
               title="Add a shape"
+              className="vt-toolbar-btn"
               style={{ height: 34, padding: '0 10px 0 12px', border: '1px solid var(--border)', borderRadius: 8, background: 'transparent', color: 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 12.5, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
             >
               <i className="ph ph-square" style={{ fontSize: 14 }} />
@@ -1136,6 +1142,7 @@ export function Customize() {
               type="button"
               onClick={() => setMockupMenuOpen((v) => !v)}
               title="Add a device mockup"
+              className="vt-toolbar-btn"
               style={{ height: 34, padding: '0 10px 0 12px', border: '1px solid var(--border)', borderRadius: 8, background: 'transparent', color: 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 12.5, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
             >
               <i className="ph ph-device-mobile" style={{ fontSize: 14 }} />
@@ -1241,6 +1248,7 @@ export function Customize() {
                     actions.setActiveFreeformPage(p.id);
                     pageRefs.current[p.id]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                   }}
+                  className={`vt-list-row${active ? ' is-active' : ''}`}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -1360,6 +1368,7 @@ export function Customize() {
                     <div
                       key={el.id}
                       onClick={(e) => actions.selectFreeform(activePage.id, el.id, e.shiftKey)}
+                      className={`vt-list-row${active ? ' is-active' : ''}`}
                       style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 7, cursor: 'pointer', background: active ? 'var(--violet-light)' : 'transparent' }}
                     >
                       <i className={icon} style={{ fontSize: 13, color: active ? 'var(--violet-deep)' : 'var(--text-3)', flex: 'none' }} />

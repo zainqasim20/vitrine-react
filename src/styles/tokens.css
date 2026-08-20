@@ -14,7 +14,10 @@
   --border-strong: #D3D3D8;
   --text: #14141A;
   --text-2: #55555F;
-  --text-3: #94949C;
+  /* #94949C measured 3.0:1 on white -- fails WCAG AA (4.5:1) for normal
+     text. #6B6B74 hits ~5.3:1, same hue/weight, still reads as a clearly
+     secondary/muted tone next to --text-2. */
+  --text-3: #6B6B74;
 
   --violet: #7A47F5;
   --violet-deep: #6038EE;
@@ -69,7 +72,9 @@
   --border-strong: #3A3A44;
   --text: #F2F2F4;
   --text-2: #A7A7B0;
-  --text-3: #77777F;
+  /* #77777F measured 4.27:1 on this dark bg -- just under WCAG AA's
+     4.5:1 for normal text. #8A8A93 hits ~5.5:1, same hue/weight. */
+  --text-3: #8A8A93;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -83,6 +88,8 @@
     --border-strong: #3A3A44;
     --text: #F2F2F4;
     --text-2: #A7A7B0;
-    --text-3: #77777F;
+    /* #77777F measured 4.27:1 on this dark bg -- just under WCAG AA's
+     4.5:1 for normal text. #8A8A93 hits ~5.5:1, same hue/weight. */
+  --text-3: #8A8A93;
   }
 }

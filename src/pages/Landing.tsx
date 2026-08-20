@@ -217,9 +217,15 @@ export function Landing() {
               <span style={{ width: 52, height: 52, borderRadius: 14, background: 'var(--violet-gradient)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'center' }}>
                 <i className="ph ph-cloud-arrow-up" style={{ fontSize: 26, color: '#FFFFFF' }} />
               </span>
+              {/* This card's background is deliberately fixed light lavender
+                  in both themes (--violet-light has no dark override), so
+                  its text needs fixed dark ink too -- the theme-swapping
+                  --text/--text-2 tokens turn near-white in dark mode and go
+                  invisible against this light card. Real bug, not
+                  cosmetic: confirmed via a dark-mode screenshot. */}
               <span style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 17, color: 'var(--text)' }}>Drop your screens here to start</span>
-                <span style={{ fontSize: 14, lineHeight: 1.5, color: 'var(--text-2)', textAlign: 'center' }}>PNG, JPG or MP4 · a draft in about a minute · no account needed</span>
+                <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 17, color: '#14141A' }}>Drop your screens here to start</span>
+                <span style={{ fontSize: 14, lineHeight: 1.5, color: '#55555F', textAlign: 'center' }}>PNG, JPG or MP4 · a draft in about a minute · no account needed</span>
               </span>
             </button>
           </div>

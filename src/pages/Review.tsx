@@ -71,11 +71,14 @@ export function Review() {
             <button
               type="button"
               onClick={() => setTplOpen((v) => !v)}
-              style={{ height: 32, padding: '0 12px', border: `1px solid ${tplOpen ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 999, background: tplOpen ? 'var(--violet-light)' : 'transparent', color: 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 500, fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}
+              style={{ height: 32, padding: '0 12px', border: `1px solid ${tplOpen ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 999, background: tplOpen ? 'var(--violet-light)' : 'transparent', color: tplOpen ? '#14141A' : 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 500, fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}
             >
-              <span style={{ color: 'var(--text-3)' }}>Template:</span>
+              {/* This pill's background switches to the always-light
+                  --violet-light when open -- var(--text)/text-3 turn
+                  near-white in dark mode and go low-contrast against it. */}
+              <span style={{ color: tplOpen ? '#55555F' : 'var(--text-3)' }}>Template:</span>
               {state.template}
-              <i className={tplOpen ? 'ph ph-caret-up' : 'ph ph-caret-down'} style={{ fontSize: 14, color: 'var(--text-3)' }} />
+              <i className={tplOpen ? 'ph ph-caret-up' : 'ph ph-caret-down'} style={{ fontSize: 14, color: tplOpen ? '#55555F' : 'var(--text-3)' }} />
             </button>
 
             {tplOpen && (

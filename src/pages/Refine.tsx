@@ -597,7 +597,7 @@ export function Refine() {
                   'Each upload becomes a numbered step with its own status.',
                   'A sequence, not a percentage bar.',
                 ].map((text, i) => (
-                  <button key={i} type="button" onClick={() => actions.pickRewrite(i)} style={{ padding: '10px 12px', border: `1.5px solid ${state.rwPick === i ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 10, background: state.rwPick === i ? 'var(--violet-light)' : 'transparent', color: 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 13, lineHeight: 1.5, textAlign: 'left', cursor: 'pointer' }}>
+                  <button key={i} type="button" onClick={() => actions.pickRewrite(i)} style={{ padding: '10px 12px', border: `1.5px solid ${state.rwPick === i ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 10, background: state.rwPick === i ? 'var(--violet-light)' : 'transparent', color: state.rwPick === i ? 'var(--violet-deep)' : 'var(--text)', fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 13, lineHeight: 1.5, textAlign: 'left', cursor: 'pointer' }}>
                     {text}
                   </button>
                 ))}
@@ -710,11 +710,15 @@ export function Refine() {
                         <span style={{ height: 72, borderRadius: 8, background: 'var(--surface-2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                           <span style={{ width: 26, height: 26, borderRadius: 8, background: stat ? '#F3F3F5' : 'var(--violet-gradient)', border: stat ? '1.5px solid var(--border)' : 0, animation: stat ? 'none' : `${m.keyframe} 2.2s ease-in-out infinite` }} />
                         </span>
+                        {/* Card background switches to the always-light
+                            --violet-light when `on` -- an unset/text-3 color
+                            inherits near-white in dark mode and goes
+                            low-contrast against it. */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ flex: 1, fontSize: 13, fontWeight: 700 }}>{m.name}</span>
+                          <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: on ? '#14141A' : 'var(--text)' }}>{m.name}</span>
                           <i className={on ? 'ph-fill ph-check-circle' : 'ph ph-play'} style={{ fontSize: 16, color: on ? 'var(--violet-deep)' : 'var(--text-3)' }} />
                         </div>
-                        <span style={mono()}>{m.meta}</span>
+                        <span style={{ ...mono(), color: on ? '#55555F' : 'var(--text-3)' }}>{m.meta}</span>
                       </div>
                     );
                   })}
@@ -772,9 +776,13 @@ export function Refine() {
                   return (
                     <button key={t.label} type="button" onClick={() => actions.setTrigger(t.label)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 14, border: `1.5px solid ${on ? 'var(--violet)' : 'var(--border)'}`, borderRadius: 10, background: on ? 'var(--violet-light)' : 'transparent', cursor: 'pointer', textAlign: 'left' }}>
                       <i className={t.icon} style={{ fontSize: 20, color: on ? 'var(--violet-deep)' : 'var(--text-3)' }} />
+                      {/* This card's background switches to the always-light
+                          --violet-light when `on` -- var(--text)/text-3 turn
+                          near-white in dark mode and go low-contrast against
+                          it, same bug class as the Landing hero dropzone. */}
                       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{t.label}</span>
-                        <span style={mono()}>{t.meta}</span>
+                        <span style={{ fontSize: 15, fontWeight: 700, color: on ? '#14141A' : 'var(--text)' }}>{t.label}</span>
+                        <span style={{ ...mono(), color: on ? '#55555F' : 'var(--text-3)' }}>{t.meta}</span>
                       </div>
                       <i className={on ? 'ph-fill ph-check-circle' : 'ph ph-circle'} style={{ fontSize: 18, color: on ? 'var(--violet-deep)' : 'var(--text-3)' }} />
                     </button>

@@ -145,7 +145,11 @@ export function Questions() {
                         <span key={i} style={{ height: 5, borderRadius: 2, background: i === 0 ? 'var(--text)' : 'var(--border)', width: `${w}%` }} />
                       ))}
                     </span>
-                    <span style={{ fontSize: 13, fontWeight: 700 }}>{o.label}</span>
+                    {/* Card background switches to the always-light
+                        --violet-light when `on` -- inherited var(--text)
+                        turns near-white in dark mode and goes low-contrast
+                        against it. */}
+                    <span style={{ fontSize: 13, fontWeight: 700, color: on ? '#14141A' : 'var(--text)' }}>{o.label}</span>
                   </button>
                 );
               })}

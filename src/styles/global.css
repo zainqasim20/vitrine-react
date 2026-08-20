@@ -53,3 +53,22 @@ img[data-logo="dark"] { display: none !important; }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* Customize editor chrome -- shared interactive affordances so icon and
+   toolbar buttons read as pressable rather than flat/dead in either
+   theme. Own-construction UI (not ported real content), so this is a
+   cosmetic pass, disclosed as such. */
+.vt-icon-btn { transition: background 120ms ease-out, color 120ms ease-out; }
+.vt-icon-btn:hover:not(:disabled) { background: var(--surface-3); color: var(--text); }
+
+.vt-toolbar-btn { transition: background 120ms ease-out, border-color 120ms ease-out, box-shadow 120ms ease-out, transform 120ms ease-out; }
+.vt-toolbar-btn:hover:not(:disabled) { background: var(--surface-2); border-color: var(--border-strong); }
+.vt-toolbar-btn:active:not(:disabled) { transform: translateY(1px); }
+
+.vt-primary-btn { transition: filter 120ms ease-out, transform 120ms ease-out, box-shadow 120ms ease-out; }
+.vt-primary-btn:hover { filter: brightness(1.08); box-shadow: 0 4px 16px rgba(122,71,245,0.28); }
+.vt-primary-btn:active { transform: translateY(1px); }
+
+.vt-list-row { transition: background 100ms ease-out; }
+.vt-list-row:hover { background: var(--surface-3); }
+.vt-list-row.is-active:hover { background: var(--violet-light); }

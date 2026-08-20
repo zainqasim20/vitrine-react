@@ -298,7 +298,7 @@ const initialState: AppState = {
   draftStatus: {},
   draftError: {},
 
-  apiStatus: { gemini: false, pexels: false, checked: false },
+  apiStatus: { gemini: false, pexels: false, unsplash: false, checked: false },
   stockCache: {},
   pipeline: {
     perceiveRecords: {},
@@ -620,11 +620,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     fetch('/api/status')
       .then((r) => r.json())
-      .then((data: { gemini?: boolean; pexels?: boolean }) => {
-        patch({ apiStatus: { gemini: !!data.gemini, pexels: !!data.pexels, checked: true } });
+      .then((data: { gemini?: boolean; pexels?: boolean; unsplash?: boolean }) => {
+        patch({ apiStatus: { gemini: !!data.gemini, pexels: !!data.pexels, unsplash: !!data.unsplash, checked: true } });
       })
       .catch(() => {
-        patch({ apiStatus: { gemini: false, pexels: false, checked: true } });
+        patch({ apiStatus: { gemini: false, pexels: false, unsplash: false, checked: true } });
       });
   }, [patch]);
 

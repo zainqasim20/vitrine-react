@@ -44,6 +44,8 @@ export default function viteDevApiPlugin() {
     '/api/analyze-image': new URL('./api/analyze-image.js', import.meta.url),
     '/api/narrate-case-study': new URL('./api/narrate-case-study.js', import.meta.url),
     '/api/pexels-search': new URL('./api/pexels-search.js', import.meta.url),
+    '/api/unsplash-search': new URL('./api/unsplash-search.js', import.meta.url),
+    '/api/unsplash-track-download': new URL('./api/unsplash-track-download.js', import.meta.url),
   };
 
   return {

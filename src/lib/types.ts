@@ -11,10 +11,15 @@ export type CanvasSection =
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
-// Real Pexels photo shape returned by /api/pexels-search, ported unchanged
-// from the live site's response mapping.
+// Real stock-photo shape, returned by /api/pexels-search (unchanged from
+// the live site's response mapping) and /api/unsplash-search (a second,
+// later-added real source normalized into the same fields -- see
+// StockPhotoSearch in Customize.tsx). downloadLocation is Unsplash-only:
+// their API Guidelines require pinging that URL when a photo is actually
+// used, not just shown in search results (see
+// api/unsplash-track-download.js); Pexels has no equivalent requirement.
 export interface PexelsPhoto {
-  id: number;
+  id: number | string;
   src: string;
   thumb: string;
   width: number;
@@ -23,6 +28,8 @@ export interface PexelsPhoto {
   photographerUrl: string;
   pageUrl: string;
   alt: string;
+  source?: 'pexels' | 'unsplash';
+  downloadLocation?: string;
 }
 
 export type StockPhotoEntry = { status: 'loading' } | { status: 'unavailable' } | { status: 'ready'; photo: PexelsPhoto } | { status: 'error'; message: string };
@@ -257,7 +264,7 @@ export interface AppState {
   // behavior only runs when apiStatus.gemini is true; otherwise the app
   // falls through to the pre-pipeline flow unchanged. pexels gates the
   // Templates gallery's real stock photos the same way.
-  apiStatus: { gemini: boolean; pexels: boolean; checked: boolean };
+  apiStatus: { gemini: boolean; pexels: boolean; unsplash: boolean; checked: boolean };
 
   // Real stock photos for the Templates gallery, fetched live from Pexels
   // through /api/pexels-search -- cached per query so re-filtering doesn't

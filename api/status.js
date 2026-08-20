@@ -11,6 +11,7 @@ export default async function handler(req, res) {
   }
   res.status(200).json({
     pexels: isUsableKey(process.env.PEXELS_API_KEY),
+    unsplash: isUsableKey(process.env.UNSPLASH_ACCESS_KEY),
     gemini: isUsableKey(process.env.GEMINI_API_KEY),
     openai: isUsableKey(process.env.OPENAI_API_KEY),
   });

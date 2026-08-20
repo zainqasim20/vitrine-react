@@ -35,6 +35,7 @@ export default async function handler(req, res) {
       photographerUrl: p.photographer_url,
       pageUrl: p.url,
       alt: p.alt,
+      source: 'pexels',
     }));
     res.status(200).json({ photos });
   } catch (e) {

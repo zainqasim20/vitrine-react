@@ -200,7 +200,16 @@ function GradientEditor({ value, onChange }: { value: string; onChange: (css: st
 function MediaFillPicker({ value, onChange }: { value: string | null; onChange: (css: string) => void }) {
   const { state } = useApp();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [mode, setMode] = useState<'upload' | 'search'>(state.apiStatus.pexels ? 'search' : 'upload');
+  const [mode, setMode] = useState<'upload' | 'search'>(state.apiStatus.pexels || state.apiStatus.unsplash ? 'search' : 'upload');
+
+  // apiStatus resolves asynchronously, so the initial guess above (made
+  // before /api/status has answered) can be wrong -- default to Search
+  // once a real key turns out to be configured, same correction pattern
+  // as StockPhotoSearch's own source-selection effect below.
+  useEffect(() => {
+    if (state.apiStatus.checked && (state.apiStatus.pexels || state.apiStatus.unsplash)) setMode((m) => (m === 'upload' && !value ? 'search' : m));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.apiStatus.checked]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -261,17 +270,34 @@ function MediaFillPicker({ value, onChange }: { value: string | null; onChange: 
 // references Pexels images directly rather than mirroring them.
 function StockPhotoSearch({ onPick }: { onPick: (css: string) => void }) {
   const { state } = useApp();
+  const [source, setSource] = useState<'pexels' | 'unsplash'>(state.apiStatus.pexels ? 'pexels' : 'unsplash');
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [results, setResults] = useState<PexelsPhoto[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
+
+  // apiStatus resolves asynchronously (see the /api/status fetch in
+  // store.tsx) -- both flags read false on first render regardless of what
+  // keys actually exist, so the initial `source` guess above can be wrong.
+  // This corrects it once the real check lands, without overriding a
+  // choice the user already made between two available sources.
+  useEffect(() => {
+    if (!state.apiStatus.checked) return;
+    setSource((prev) => {
+      if (state.apiStatus.pexels && state.apiStatus.unsplash) return prev;
+      if (state.apiStatus.pexels) return 'pexels';
+      if (state.apiStatus.unsplash) return 'unsplash';
+      return prev;
+    });
+  }, [state.apiStatus.checked, state.apiStatus.pexels, state.apiStatus.unsplash]);
 
   function runSearch() {
     const q = query.trim();
     if (!q || status === 'loading') return;
     setStatus('loading');
     setErrorMsg('');
-    fetch(`/api/pexels-search?query=${encodeURIComponent(q)}&perPage=20`)
+    const endpoint = source === 'pexels' ? '/api/pexels-search' : '/api/unsplash-search';
+    fetch(`${endpoint}?query=${encodeURIComponent(q)}&perPage=20`)
       .then((r) => r.json())
       .then((data: { photos?: PexelsPhoto[]; error?: string }) => {
         if (data.error || !data.photos) {
@@ -290,16 +316,42 @@ function StockPhotoSearch({ onPick }: { onPick: (css: string) => void }) {
       });
   }
 
-  if (state.apiStatus.checked && !state.apiStatus.pexels) {
+  // Applies the pick immediately, then -- for Unsplash only -- fires the
+  // required "download" tracking ping in the background (their API
+  // Guidelines: a photo actually used in-app, not just shown in search
+  // results, must trigger this). Never blocks or waits on it; a failed
+  // ping shouldn't undo an otherwise-successful pick.
+  function pick(p: PexelsPhoto) {
+    onPick(`url(${p.src}) center/cover no-repeat`);
+    if (p.source === 'unsplash' && p.downloadLocation) {
+      fetch(`/api/unsplash-track-download?location=${encodeURIComponent(p.downloadLocation)}`).catch(() => {});
+    }
+  }
+
+  if (!state.apiStatus.checked) return null;
+
+  if (!state.apiStatus.pexels && !state.apiStatus.unsplash) {
     return (
       <p style={{ margin: 0, fontSize: 11.5, lineHeight: 1.6, color: 'var(--text-3)' }}>
-        Real photo search needs a Pexels API key set as <code>PEXELS_API_KEY</code> in the environment — the same key the Templates gallery already uses. Once it's set there, search works here too automatically, nothing else to configure.
+        Real photo search needs a Pexels or Unsplash API key set as <code>PEXELS_API_KEY</code> / <code>UNSPLASH_ACCESS_KEY</code> in the environment. Once one's set there, search works here too automatically, nothing else to configure.
       </p>
     );
   }
 
+  const sourceLabel = source === 'pexels' ? 'Pexels' : 'Unsplash';
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {state.apiStatus.pexels && state.apiStatus.unsplash && (
+        <div style={{ display: 'flex', gap: 4 }}>
+          <button type="button" onClick={() => setSource('pexels')} style={tabBtnStyle(source === 'pexels')}>
+            Pexels
+          </button>
+          <button type="button" onClick={() => setSource('unsplash')} style={tabBtnStyle(source === 'unsplash')}>
+            Unsplash
+          </button>
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 6 }}>
         <input
           value={query}
@@ -326,14 +378,14 @@ function StockPhotoSearch({ onPick }: { onPick: (css: string) => void }) {
             <button
               key={p.id}
               type="button"
-              title={`Photo by ${p.photographer} on Pexels`}
-              onClick={() => onPick(`url(${p.src}) center/cover no-repeat`)}
+              title={`Photo by ${p.photographer} on ${sourceLabel}`}
+              onClick={() => pick(p)}
               style={{ height: 64, borderRadius: 6, border: '1px solid var(--border)', background: `url(${p.thumb}) center/cover`, cursor: 'pointer', padding: 0 }}
             />
           ))}
         </div>
       )}
-      <p style={{ margin: 0, fontSize: 10, lineHeight: 1.5, color: 'var(--text-3)' }}>Real photos via Pexels — hover a result to see its photographer. Free to use; attribution appreciated but not required.</p>
+      <p style={{ margin: 0, fontSize: 10, lineHeight: 1.5, color: 'var(--text-3)' }}>Real photos via {sourceLabel} — hover a result to see its photographer. Free to use; attribution appreciated but not required.</p>
     </div>
   );
 }

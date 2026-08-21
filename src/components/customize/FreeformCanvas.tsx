@@ -529,6 +529,7 @@ export function FreeformCanvas({ page, selectedIds, onSelect, onPatch, onDelete,
                           pointerEvents: 'none',
                           opacity: el.opacity ?? 1,
                           filter: freeformImageFilter(el) || undefined,
+                          mixBlendMode: el.blendMode && el.blendMode !== 'normal' ? el.blendMode : undefined,
                         }}
                       />
                     </div>

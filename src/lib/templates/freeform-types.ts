@@ -106,6 +106,13 @@ export interface FreeformImageElement extends FreeformElementBase {
   contrast?: number; // %, 100 = untouched
   saturation?: number; // %, 100 = untouched
   temperature?: number; // -100 (cool) .. 100 (warm), 0 = untouched
+  // CSS mix-blend-mode -- lets a logo/graphic composite into the photo
+  // beneath it (surface texture/lighting shows through) instead of sitting
+  // on top as a flat, pasted-on sticker. 'multiply' is the one that reads
+  // as "printed on a wall/banner"; the others are here for cases where
+  // multiply looks muddy on a dark photo. Unset/'normal' = no blending, the
+  // plain default every other image on the canvas already uses.
+  blendMode?: 'normal' | 'multiply' | 'screen' | 'overlay' | 'luminosity' | 'soft-light';
 }
 
 export type FreeformShapeKind = 'rect' | 'ellipse' | 'triangle' | 'pentagon' | 'hexagon' | 'star' | 'arrow' | 'line';
@@ -206,6 +213,55 @@ export function freeformShapeClipPath(shape: FreeformShapeKind): string | undefi
       return undefined;
   }
 }
+
+// ---------------------------------------------------------------------
+// Logo mockups -- a real, searched photo of a surface (wall, pillar, card,
+// building, fabric) as the background, with a locked overlay image the
+// user replaces with their own logo (same replace-image affordance a
+// device mockup's "screen" already uses). Deliberately no skew/perspective
+// warp on the overlay -- a flat rectangle blended with 'multiply' (see
+// FreeformImageElement.blendMode) reads as convincingly "printed on" for a
+// surface photographed close to straight-on, and faking perspective with a
+// 2D skew on a photo that actually recedes in depth tends to look more
+// wrong than no correction at all. The search query per kind is chosen to
+// favor straight-on, flat compositions for exactly that reason.
+export type FreeformLogoMockupKind = 'wall' | 'pillar' | 'card' | 'facade' | 'fabric';
+
+export const FREEFORM_LOGO_MOCKUP_CONFIG: Record<
+  FreeformLogoMockupKind,
+  { label: string; icon: string; query: string; overlay: (w: number, h: number) => { w: number; h: number; x: number; y: number } }
+> = {
+  wall: {
+    label: 'Wall banner',
+    icon: 'ph ph-selection-all',
+    query: 'concrete wall texture',
+    overlay: (w, h) => ({ w: Math.round(w * 0.56), h: Math.round(h * 0.34), x: Math.round(w * 0.22), y: Math.round(h * 0.33) }),
+  },
+  pillar: {
+    label: 'Concrete pillar',
+    icon: 'ph ph-columns',
+    query: 'concrete pillar architecture',
+    overlay: (w, h) => ({ w: Math.round(w * 0.26), h: Math.round(h * 0.5), x: Math.round(w * 0.37), y: Math.round(h * 0.25) }),
+  },
+  card: {
+    label: 'Business card',
+    icon: 'ph ph-address-card',
+    query: 'blank business card mockup desk',
+    overlay: (w, h) => ({ w: Math.round(w * 0.34), h: Math.round(h * 0.2), x: Math.round(w * 0.33), y: Math.round(h * 0.4) }),
+  },
+  facade: {
+    label: 'Building facade',
+    icon: 'ph ph-buildings',
+    query: 'modern concrete building facade',
+    overlay: (w, h) => ({ w: Math.round(w * 0.62), h: Math.round(h * 0.16), x: Math.round(w * 0.19), y: Math.round(h * 0.6) }),
+  },
+  fabric: {
+    label: 'Fabric banner',
+    icon: 'ph ph-flag-banner',
+    query: 'canvas fabric texture natural',
+    overlay: (w, h) => ({ w: Math.round(w * 0.46), h: Math.round(h * 0.46), x: Math.round(w * 0.27), y: Math.round(h * 0.27) }),
+  },
+};
 
 // ---------------------------------------------------------------------
 // Gradients -- linear/radial/conic, any number of color stops. Every

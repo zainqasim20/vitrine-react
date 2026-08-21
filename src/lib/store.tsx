@@ -13,7 +13,7 @@ import moduleSequences from './pipeline/config/module-sequences.json';
 import type { ApprovedSection, CategorySignalsConfig, DesignSystemColor, DesignSystemSheet, ModuleSequencesConfig, PresentFrame } from './pipeline/types';
 import type { Caption, CanvasSection, ClientStatus, ProjectRecord, ProjectSnapshot, SceneTreatment, StockPhotoEntry } from './types';
 import { buildFeatureStoryFreeformPages } from './templates/freeform-seed';
-import { freeformId, FREEFORM_CANVAS_WIDTH, type FreeformDoc, type FreeformElement, type FreeformElementType, type FreeformPage, type FreeformShapeKind } from './templates/freeform-types';
+import { freeformId, FREEFORM_CANVAS_WIDTH, FREEFORM_LOGO_MOCKUP_CONFIG, type FreeformDoc, type FreeformElement, type FreeformElementType, type FreeformLogoMockupKind, type FreeformPage, type FreeformShapeKind } from './templates/freeform-types';
 
 // New elements added from the Customize screen's own "+ Text/Image/Shape/
 // Button" toolbar start with this generic gray placeholder graphic (not a
@@ -544,6 +544,7 @@ export interface AppActions {
   addFreeformElement: (pageId: string, type: FreeformElementType, shapeKind?: FreeformShapeKind) => void;
   addFreeformMockup: (pageId: string, kind: 'phone' | 'laptop' | 'browser' | 'tablet', tilted: boolean) => void;
   addFreeformPhotoMockup: (pageId: string, photoSrc: string, photoWidth: number, photoHeight: number, label: string) => void;
+  addFreeformLogoMockup: (pageId: string, kind: FreeformLogoMockupKind, photoSrc: string, photoWidth: number, photoHeight: number, label: string) => void;
   duplicateFreeformElement: (pageId: string, elementId: string) => void;
   duplicateFreeformElements: (pageId: string, elementIds: string[]) => void;
   alignFreeformElements: (pageId: string, elementIds: string[], mode: 'left' | 'centerH' | 'right' | 'top' | 'centerV' | 'bottom') => void;
@@ -2030,6 +2031,62 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [patch],
   );
 
+  // A brand mockup: a real, searched photo of a surface (wall, pillar,
+  // card, building, fabric) plus a locked overlay the user replaces with
+  // their own logo -- same replace-image affordance and same "generic
+  // best-effort placement, nudge to match this specific photo" honesty as
+  // addFreeformPhotoMockup above. Deliberately no perspective skew (see
+  // FREEFORM_LOGO_MOCKUP_CONFIG's comment); 'multiply' blend is what sells
+  // "printed on" for a straight-on surface photo.
+  const addFreeformLogoMockup = useCallback(
+    (pageId: string, kind: FreeformLogoMockupKind, photoSrc: string, photoWidth: number, photoHeight: number, label: string) => {
+      snapshotFreeformHistory();
+      patch((s) => {
+        const page = s.freeform?.pages.find((p) => p.id === pageId);
+        if (!page) return {};
+        let z = freeformMaxZ(page.elements);
+        const cx = FREEFORM_CANVAS_WIDTH / 2;
+        const cy = page.height / 2;
+        const groupId = freeformId('group');
+
+        const maxDim = 560;
+        const scale = Math.min(maxDim / (photoWidth || maxDim), maxDim / (photoHeight || maxDim), 1);
+        const w = Math.round((photoWidth || maxDim) * scale);
+        const h = Math.round((photoHeight || maxDim) * scale);
+        const x = cx - w / 2;
+        const y = cy - h / 2;
+
+        z += 1;
+        const backgroundEl: FreeformElement = { id: freeformId('image'), type: 'image', x, y, w, h, zIndex: z, src: photoSrc, objectFit: 'cover', borderRadius: 12, groupId, name: `${label} photo` };
+
+        const overlay = FREEFORM_LOGO_MOCKUP_CONFIG[kind].overlay(w, h);
+        z += 1;
+        const logoEl: FreeformElement = {
+          id: freeformId('image'),
+          type: 'image',
+          x: Math.round(x + overlay.x),
+          y: Math.round(y + overlay.y),
+          w: overlay.w,
+          h: overlay.h,
+          zIndex: z,
+          src: FREEFORM_PLACEHOLDER_IMAGE,
+          objectFit: 'contain',
+          borderRadius: 0,
+          locked: true,
+          blendMode: 'multiply',
+          groupId,
+          name: 'Logo overlay (replace with your logo)',
+        };
+
+        return {
+          freeform: mapFreeformPage(s.freeform, pageId, (p) => ({ ...p, elements: [...p.elements, backgroundEl, logoEl] })),
+          freeformSelectedIds: [backgroundEl.id, logoEl.id],
+        };
+      });
+    },
+    [patch],
+  );
+
   const duplicateFreeformElement = useCallback(
     (pageId: string, elementId: string) => {
       snapshotFreeformHistory();
@@ -2798,6 +2855,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     addFreeformElement,
     addFreeformMockup,
     addFreeformPhotoMockup,
+    addFreeformLogoMockup,
     duplicateFreeformElement,
     duplicateFreeformElements,
     alignFreeformElements,

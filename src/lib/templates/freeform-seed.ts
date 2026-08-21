@@ -21,6 +21,20 @@
 // resize, recolor, or delete like anything else.
 import * as demo from './editorial-demo-content';
 import { freeformId, FREEFORM_CANVAS_WIDTH as W, type FreeformButtonElement, type FreeformImageElement, type FreeformPage, type FreeformShapeElement, type FreeformTextElement } from './freeform-types';
+// Real product photography, reused here rather than re-fetched -- these
+// same files already back the Cover, Overview, Product Card, Website
+// Homepage and Closing Mosaic pages elsewhere in this seed. Each one
+// already has the real "THE FLORIST" mark baked into the shot (this is
+// finished packaging/signage photography, not a blank surface), so this
+// page is a straight application-photo showcase -- it doesn't use the new
+// Logo mockup compositing tool (that tool is for a surface photo that does
+// NOT yet have a logo on it).
+import brandStorefront from '../../assets/the-florist/storefront.jpg';
+import brandStackedCards from '../../assets/the-florist/stacked-cards.jpg';
+import brandWrapPattern from '../../assets/the-florist/bouquet-wrap-gold-ribbon.jpg';
+import brandBoxBouquet from '../../assets/the-florist/box-bouquet.jpg';
+import brandBagBouquet from '../../assets/the-florist/bag-bouquet.jpg';
+import brandLogoOnBlack from '../../assets/the-florist/logo-on-black-1.jpg';
 
 const INK = '#0D0D0D';
 const GOLD = '#C8A24D';
@@ -154,6 +168,35 @@ function logoDerivationPage(): FreeformPage {
       ...(finalMark.shapeUrl ? [I(892, 106, 96, 128, 8, finalMark.shapeUrl, { objectFit: 'contain' as const })] : []),
     ],
   };
+}
+
+// A real-world application showcase -- the mark as it actually sits on
+// packaging, cards, wrap paper and the storefront sign, stacked full-bleed
+// the way a brand case study presents it (title -> a clean solo lockup ->
+// one application photo per surface). Distinct from logoDerivationPage
+// above, which explains how the mark itself was built.
+function brandingShowcasePage(): FreeformPage {
+  let z = 1;
+  const elements = [
+    T(80, 48, 700, 32, z++, 'Branding & Visual Identity', { fontFamily: 'display', fontSize: 24, fontWeight: 600, color: INK }),
+    T(80, 84, 500, 18, z++, '© 2026', { fontFamily: 'mono', fontSize: 11.5, color: TEXT_3 }),
+    T(760, 48, 160, 16, z++, 'BRANDING', { fontFamily: 'mono', fontSize: 10.5, fontWeight: 600, color: TEXT_3, uppercase: true, letterSpacing: '0.1em', align: 'right' }),
+    T(760, 66, 160, 16, z++, 'YEAR', { fontFamily: 'mono', fontSize: 10.5, fontWeight: 600, color: TEXT_3, uppercase: true, letterSpacing: '0.1em', align: 'right' }),
+    T(760, 84, 160, 20, z++, '2026', { fontWeight: 700, fontSize: 13, color: INK, align: 'right' }),
+
+    S(0, 140, W, 260, z++, SURFACE_2),
+    I(440, 190, 320, 160, z++, demo.cover.logoUrl, { objectFit: 'contain' }),
+
+    I(0, 420, W, 460, z++, brandStorefront, { objectFit: 'cover' }),
+    I(0, 900, W, 460, z++, brandWrapPattern, { objectFit: 'cover' }),
+    I(0, 1380, W, 460, z++, brandStackedCards, { objectFit: 'cover' }),
+
+    I(0, 1860, W / 2 - 4, 380, z++, brandBoxBouquet, { objectFit: 'cover' }),
+    I(W / 2 + 4, 1860, W / 2 - 4, 380, z++, brandBagBouquet, { objectFit: 'cover' }),
+
+    I(0, 2260, W, 460, z++, brandLogoOnBlack, { objectFit: 'cover' }),
+  ];
+  return { id: 'branding-showcase', name: 'Branding & Visual Identity', backgroundColor: WHITE, height: 2720, elements };
 }
 
 function typographyColorsPage(): FreeformPage {
@@ -295,6 +338,7 @@ export function buildFeatureStoryFreeformPages(): FreeformPage[] {
     overviewPage(),
     problemSolutionPage(),
     logoDerivationPage(),
+    brandingShowcasePage(),
     typographyColorsPage(),
     deviceMockupPage(),
     productCardPage(),

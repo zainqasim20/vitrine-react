@@ -4,8 +4,8 @@ import { useApp } from '../lib/store';
 import { Logo } from '../components/Logo';
 import { ThemeSwitch } from '../components/ThemeSwitch';
 import { FreeformCanvas } from '../components/customize/FreeformCanvas';
-import type { FreeformElement, FreeformElementType, FreeformGradient, FreeformPage, FreeformShapeKind } from '../lib/templates/freeform-types';
-import { buildFreeformGradientCss, FREEFORM_SCENERY_PRESETS, FREEFORM_VIBRANT_PRESETS, parseFreeformGradient } from '../lib/templates/freeform-types';
+import type { FreeformElement, FreeformElementType, FreeformGradient, FreeformImageElement, FreeformPage, FreeformShapeKind } from '../lib/templates/freeform-types';
+import { buildFreeformGradientCss, FREEFORM_LOGO_MOCKUP_CONFIG, FREEFORM_SCENERY_PRESETS, FREEFORM_VIBRANT_PRESETS, parseFreeformGradient, type FreeformLogoMockupKind } from '../lib/templates/freeform-types';
 import { FONT_CATEGORY_LABELS, GOOGLE_FONTS, loadGoogleFont, resolveFreeformFontCss, type GoogleFontCategory } from '../lib/templates/google-fonts';
 import { captureFreeformCoverThumb, exportFreeformPagesAsImages, exportFreeformPagesAsPdf } from '../lib/templates/freeform-export';
 import type { PexelsPhoto } from '../lib/types';
@@ -797,6 +797,7 @@ export function Customize() {
   const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
   const [mockupMenuOpen, setMockupMenuOpen] = useState(false);
   const [photoMockupLoading, setPhotoMockupLoading] = useState<'phone' | 'tablet' | 'laptop' | null>(null);
+  const [logoMockupLoading, setLogoMockupLoading] = useState<FreeformLogoMockupKind | null>(null);
   const [aspectLocked, setAspectLocked] = useState(false);
   const [leftWidth, setLeftWidth] = useState(220);
   const [rightWidth, setRightWidth] = useState(280);
@@ -1011,6 +1012,35 @@ export function Customize() {
     }
   }
 
+  async function handleAddLogoMockup(kind: FreeformLogoMockupKind) {
+    if (!state.apiStatus.pexels && !state.apiStatus.unsplash) return;
+    setMockupMenuOpen(false);
+    setLogoMockupLoading(kind);
+    const sources: ('pexels' | 'unsplash')[] = state.apiStatus.pexels ? ['pexels', 'unsplash'] : ['unsplash'];
+    try {
+      let photo: PexelsPhoto | null = null;
+      for (const src of sources) {
+        if (src === 'unsplash' && !state.apiStatus.unsplash) continue;
+        const endpoint = src === 'pexels' ? '/api/pexels-search' : '/api/unsplash-search';
+        const r = await fetch(`${endpoint}?query=${encodeURIComponent(FREEFORM_LOGO_MOCKUP_CONFIG[kind].query)}&perPage=1`);
+        const data: { photos?: PexelsPhoto[] } = await r.json();
+        if (data.photos && data.photos.length) {
+          photo = data.photos[0];
+          break;
+        }
+      }
+      if (!photo) {
+        actions.say('No real photo found for that mockup right now — try again.');
+        return;
+      }
+      actions.addFreeformLogoMockup(activePage.id, kind, photo.src, photo.width, photo.height, FREEFORM_LOGO_MOCKUP_CONFIG[kind].label);
+    } catch {
+      actions.say('Photo search failed — try again.');
+    } finally {
+      setLogoMockupLoading(null);
+    }
+  }
+
   return (
     <div
       onClick={(e) => {
@@ -1214,6 +1244,39 @@ export function Customize() {
                   ) : (
                     <p style={{ margin: '4px 8px 2px', fontSize: 10.5, lineHeight: 1.5, color: 'var(--text-3)' }}>Drops in a real, searched device photo + a screen overlay for your own screenshot. There's no way to detect exactly where the screen sits in an arbitrary photo, so nudge/resize the overlay to line up with that specific photo.</p>
                   )}
+                  <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
+                  <span style={{ ...mono(), padding: '0 8px' }}>Logo mockup (real photo)</span>
+                  {(Object.keys(FREEFORM_LOGO_MOCKUP_CONFIG) as FreeformLogoMockupKind[]).map((kind) => {
+                    const cfg = FREEFORM_LOGO_MOCKUP_CONFIG[kind];
+                    const disabled = !!logoMockupLoading || (!state.apiStatus.pexels && !state.apiStatus.unsplash);
+                    return (
+                      <button
+                        key={kind}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => handleAddLogoMockup(kind)}
+                        style={{
+                          height: 34,
+                          border: 0,
+                          borderRadius: 8,
+                          background: 'transparent',
+                          color: !state.apiStatus.pexels && !state.apiStatus.unsplash ? 'var(--text-3)' : 'var(--text)',
+                          fontFamily: "'Plus Jakarta Sans', sans-serif",
+                          fontWeight: 600,
+                          fontSize: 12.5,
+                          cursor: disabled ? 'default' : 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '0 8px',
+                        }}
+                      >
+                        <i className={logoMockupLoading === kind ? 'ph ph-circle-notch' : cfg.icon} style={{ fontSize: 15, color: 'var(--text-2)' }} />
+                        {logoMockupLoading === kind ? `Searching for ${cfg.label.toLowerCase()} photo…` : cfg.label}
+                      </button>
+                    );
+                  })}
+                  <p style={{ margin: '4px 8px 2px', fontSize: 10.5, lineHeight: 1.5, color: 'var(--text-3)' }}>Drops in a real, searched surface photo + a locked logo overlay set to Multiply blend, so it reads as printed on rather than pasted over. Replace the overlay with your own logo, then nudge/resize to fit that specific photo.</p>
                 </div>
               </>
             )}
@@ -1552,6 +1615,26 @@ export function Customize() {
                     </select>
                   </div>
                   <NumberField label="Corner radius" value={selected.borderRadius} min={0} max={999} onChange={(borderRadius) => patchSelected({ borderRadius })} />
+
+                  {/* mix-blend-mode against whatever's underneath on the
+                      canvas -- 'Multiply' is the one that makes a logo read
+                      as printed onto a photographed surface (wall, banner,
+                      card) rather than pasted on top of it. */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <span style={mono()}>Blend mode</span>
+                    <select
+                      value={selected.blendMode ?? 'normal'}
+                      onChange={(e) => patchSelected({ blendMode: e.target.value as FreeformImageElement['blendMode'] })}
+                      style={{ height: 34, border: '1px solid var(--border)', borderRadius: 8, padding: '0 10px', fontSize: 13, fontFamily: "'Plus Jakarta Sans', sans-serif", color: 'var(--text)', background: 'transparent', outline: 'none', cursor: 'pointer' }}
+                    >
+                      <option value="normal">Normal</option>
+                      <option value="multiply">Multiply — reads as printed on the surface below</option>
+                      <option value="overlay">Overlay</option>
+                      <option value="soft-light">Soft light</option>
+                      <option value="screen">Screen</option>
+                      <option value="luminosity">Luminosity</option>
+                    </select>
+                  </div>
 
                   {(selected.locked || selected.cropEnabled) && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
